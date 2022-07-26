@@ -16,6 +16,7 @@ anyhow = "1.0"
 env_logger = "0.9"
 log = "0.4"
 ndarray = "0.15"
+num = "0.4"
 finitediff = "0.1.4"
 soa_derive = "0.12"
 polars = {version="0.22", features=["dtype-datetime"]}

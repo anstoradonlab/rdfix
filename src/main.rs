@@ -1,7 +1,7 @@
 use rdfix::forward::{DetectorParamsBuilder};
 use rdfix::forward::generated_functions::calc_na_nb_factors;
 
-use rdfix::inverse::{DetectorInverseModel,InversionOptions,fit_inverse_model};
+use rdfix::inverse::{DetectorInverseModel,InversionOptions,InversionOptionsBuilder,fit_inverse_model};
 
 use rdfix::{InputRecord,InputTimeSeries};
 
@@ -34,8 +34,8 @@ fn main() {
     }
     ts.counts[20] *= 2.0;
     ts.counts[21] *= 2.0;
-    let inv_opts = InversionOptions{};
-    fit_inverse_model(p, inv_opts, ts);
+    let inv_opts = InversionOptionsBuilder::default().build().unwrap();
+    fit_inverse_model(p, inv_opts, ts).unwrap();
 
 
 }

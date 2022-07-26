@@ -1,5 +1,16 @@
+//
+// This is a forward model of the radon detector i.e. given a radon timeseries
+// it produces a timeseries of counts.
+// 
+// A key part of the model is an ODE solver.  Choice of method is discussed
+// by https://scipy-lectures.org/advanced/mathematical_optimization/ (essentially, 
+// this amounts to: use BGFS or BGFS-L, if you're happy to evaluate gradients, else
+// use the Nelder-Mead or Powell methods).
+
+
 use derive_builder::Builder;
-use ode_solvers::dop853::*;
+//use ode_solvers::dop853::*;
+use ode_solvers::dopri5::*;
 use ode_solvers::*;
 
 pub mod constants;
@@ -13,6 +24,8 @@ use core::ops::{Add,Mul};
 
 use super::{InputTimeSeries,InputRecordVec,InputRecord};
 
+use anyhow::{Result};
+
 pub enum Parameter {
     Constant(f64),
     TimeSeries(Vec<f64>),
@@ -21,9 +34,10 @@ pub enum Parameter {
 
 #[derive(Debug, Clone, Builder)]
 pub struct DetectorParams {
-    /// External flow rate (default 80 L/minute converted to m3/s)
-    #[builder(default = "80.0/1000.0/60.0")]
-    pub exflow: f64,
+    /// External flow rate scale factor (default 1.0)
+    /// The external flow rate is taken from the data file
+    #[builder(default = "1.0")]
+    pub exflow_scale: f64,   
     /// 1500 L in about 3 minutes in units of m3/s
     #[builder(default = "1.5/60.")]
     pub inflow: f64,
@@ -36,6 +50,9 @@ pub struct DetectorParams {
     /// Screen mesh capture probability (rs) (default of 0.95)
     #[builder(default = "0.95")]
     pub r_screen: f64,
+    /// Scale factor for r_screen (default of 1.0)
+    #[builder(default = "1.0")]
+    pub r_screen_scale: f64,
     /// Overall delay time (lag) of detector (default 0.0 s)
     #[builder(default = "0.0")]
     pub delay_time: f64,
@@ -43,7 +60,7 @@ pub struct DetectorParams {
     #[builder(default = "0.2")]
     pub volume_delay_1: f64,
     /// Volume of external delay tank number 2 (default 0.0 m3)
-    #[builder(default = "0.2")]
+    #[builder(default = "0.0")]
     pub volume_delay_2: f64,
     /// Time constant for plateout onto detector walls (default 1/300 sec)
     #[builder(default = "1.0/300.0")]
@@ -136,10 +153,13 @@ impl ode_solvers::System<State> for DetectorForwardModel {
         let q_internal = stepwise_interpolation(ti, &self.data.q_internal, tmax);
         let sensitivity = linear_interpolation(ti, &self.data.sensitivity, tmax);
         let background_count_rate = linear_interpolation(ti, &self.data.background_count_rate, tmax);
+        // scale factors (used in inversion)
+        let q_external = q_external * self.p.exflow_scale;
+        let r_screen = self.p.r_screen * self.p.r_screen_scale;
         // ambient (or external) radon concentration in atoms per m3
         let n_rn_ext = radon / LAMRN;
         // limit the number of free parameters by calculating some from the others
-        let (eff, recoil_prob) = calc_eff_and_recoil_prob(q_internal, self.p.r_screen, self.p.plateout_time_constant, q_external, self.p.volume_delay_1+self.p.volume_delay_2, self.p.volume, sensitivity);
+        let (eff, recoil_prob) = calc_eff_and_recoil_prob(q_internal, r_screen, self.p.plateout_time_constant, q_external, self.p.volume_delay_1, self.p.volume_delay_2, self.p.volume, sensitivity);
 
         // unpack state vector
         let n_rn_d1 = y[IDX_NRND1];
@@ -226,12 +246,12 @@ impl ode_solvers::System<State> for DetectorForwardModel {
         // Na, Nb, Nc from steady-state in tank
         // transit time assuming plug flow in the tank
         let tt = self.p.volume / q_internal;
-        let (n_a, n_b) = gf::calc_na_nb_factors(tt, n_rn, self.p.plateout_time_constant);
+        let (n_a, n_b) = gf::calc_na_nb_factors(q_internal, self.p.volume, self.p.plateout_time_constant);
         let n_c = 0.0;
         // compute rate of change of each state variable
-        let d_fa_dt = q_internal*self.p.r_screen*n_a - fa*LAMA;
-        let d_fb_dt = q_internal*self.p.r_screen*n_b - fb*LAMB + fa*LAMA * (1.0-recoil_prob);
-        let d_fc_dt = q_internal*self.p.r_screen*n_c - fc*LAMC + fb*LAMB;
+        let d_fa_dt = q_internal*r_screen*n_a*n_rn*LAMRN - fa*LAMA;
+        let d_fb_dt = q_internal*r_screen*n_b*n_rn*LAMRN - fb*LAMB + fa*LAMA * (1.0-recoil_prob);
+        let d_fc_dt = q_internal*r_screen*n_c*n_rn*LAMRN - fc*LAMC + fb*LAMB; // TODO: why is there no recoil probability here?? i.e. * (1.0-recoil_prob);
         let d_acc_counts_dt = eff*(fa*LAMA + fc*LAMC);
         // pack into dy
         dy[IDX_NRND1] = d_nrnd1_dt;
@@ -244,17 +264,6 @@ impl ode_solvers::System<State> for DetectorForwardModel {
     }
 }
 
-// This isn't used, just an idea for a conversion function
-impl From<[f64; 3]> for DetectorParams {
-    fn from(a: [f64; 3]) -> Self {
-        DetectorParamsBuilder::default()
-            .inflow(a[0])
-            .exflow(a[1])
-            .volume(a[2])
-            .build()
-            .unwrap()
-    }
-}
 
 /// Calculate efficiency and recoil probability assuming that they are
 /// linked (as described in paper) and with efficiency set by the net
@@ -276,17 +285,26 @@ impl From<[f64; 3]> for DetectorParams {
 ///   alpha detection efficiency (eff), recoil probability
 ///
 fn calc_eff_and_recoil_prob(
-    Q: f64,
+    q: f64,
     rs: f64,
     lamp: f64,
-    _Q_external: f64,
-    _V_delay: f64,
-    V_tank: f64,
+    q_external: f64,
+    v_delay_1: f64,
+    v_delay_2: f64,
+    v_tank: f64,
     total_efficiency: f64,
 ) -> (f64, f64) {
     let recoil_prob = 0.5 * (1.0 - rs);
     let eff = 1.0;
-    let ssc = gf::steady_state_count_rate(Q, V_tank, eff, lamp, recoil_prob, rs);
+
+    // account for radioactive decay in delay volumes (typical effect size: 0.3%)
+    let radon0 = 1.0;
+    let rn_d1 = radon0 / (LAMRN * v_delay_1 / q_external  + 1.0);
+    let rn_d2 = rn_d1 / (LAMRN * v_delay_2 / q_external  + 1.0);
+    let rn = rn_d2 / (LAMRN * v_tank / q_external  + 1.0);
+
+
+    let ssc = gf::steady_state_count_rate(q, v_tank, eff, lamp, recoil_prob, rs) * rn/radon0;
     let eff = eff * total_efficiency / ssc;
     (eff, recoil_prob)
 }
@@ -308,23 +326,37 @@ impl DetectorForwardModel{
         // let mut y = State::from_element(NUM_STATE_VARIABLES, 0.0);
         // this is required for a SVector
         let mut y = State::from_element(0.0);
+        // Step through the delay volumes, accounting for radioactive decay in each,
+        // by applying the relation 
+        // N/N0 = 1 / (lambda * tt + 1)
+        // where lambda is the radioactive decay constant and tt = V/Q is the transit time
+
         // Initial state has everything in equilibrium with first radon value
         // radon, atoms/m3
         let n_radon0 = radon0 / LAMRN;
-        let (_eff, recoil_prob) = calc_eff_and_recoil_prob(self.data.q_internal[0], self.p.r_screen, self.p.plateout_time_constant, self.data.q_external[0], self.p.volume_delay_1+self.p.volume_delay_2, self.p.volume, self.data.sensitivity[0]);
-        let (fa_1bq,fb_1bq,fc_1bq) = gf::num_filter_atoms_steady_state(self.data.q_internal[0], self.p.volume, self.p.plateout_time_constant, recoil_prob, self.p.r_screen);
 
-        y[IDX_NRND1] = n_radon0;
-        y[IDX_NRND2] = n_radon0;
-        y[IDX_NRN] = n_radon0;
-        y[IDX_FA] = fa_1bq * radon0;
-        y[IDX_FB] = fb_1bq * radon0;
-        y[IDX_FC] = fc_1bq * radon0;
+        let q_external = self.data.q_external[0] * self.p.exflow_scale;
+        let r_screen = self.p.r_screen * self.p.r_screen_scale;
+
+        let n_rn_d1 = n_radon0 / (LAMRN * self.p.volume_delay_1 / q_external  + 1.0);
+        let n_rn_d2 = n_rn_d1 / (LAMRN * self.p.volume_delay_2 / q_external  + 1.0);
+        let n_rn = n_rn_d2 / (LAMRN * self.p.volume / q_external  + 1.0);
+        let rn = n_rn * LAMRN;
+
+        let (_eff, recoil_prob) = calc_eff_and_recoil_prob(self.data.q_internal[0], r_screen, self.p.plateout_time_constant, self.data.q_external[0], self.p.volume_delay_1, self.p.volume_delay_2, self.p.volume, self.data.sensitivity[0]);
+        let (fa_1bq,fb_1bq,fc_1bq) = gf::num_filter_atoms_steady_state(self.data.q_internal[0], self.p.volume, self.p.plateout_time_constant, recoil_prob, r_screen);
+
+        y[IDX_NRND1] = n_rn_d1;
+        y[IDX_NRND2] = n_rn_d2;
+        y[IDX_NRN] = n_rn;
+        y[IDX_FA] = fa_1bq * rn;
+        y[IDX_FB] = fb_1bq * rn;
+        y[IDX_FC] = fc_1bq * rn;
         y[IDX_ACC_COUNTS] = 0.0;
         y
     }
 
-    pub fn numerical_solution(self) -> Result<Vec<State>, &'static str> {
+    pub fn numerical_solution(self) -> Result<Vec<State>> {
         //let system = (*self).clone()
         let system = self;
         let t0 = 0.0;
@@ -339,30 +371,24 @@ impl DetectorForwardModel{
         let beta = 0.0;
         let fac_min = 0.333;
         let fac_max = 6.0;
-        // keep the step size small because the boundary conditions may change one this time-scale
-        let h_max = if (dt<60.0) {dt} else {60.0};
+        // keep the step size small because the boundary conditions may change on this time-scale
+        let h_max = if dt<60.0 {dt} else {60.0};
         let h = 0.0;
         let n_max = 1_000_000;
         let n_stiff = 1_000;
         let out_type = dop_shared::OutputType::Dense;
 
-        let mut stepper = Dop853::from_param(system, t0, tmax, dt, y0, rtol, atol, safety_factor, beta,
+        let mut stepper = Dopri5::from_param(system, t0, tmax, dt, y0, rtol, atol, safety_factor, beta,
              fac_min, fac_max, h_max, h, n_max, n_stiff, out_type);
-        let res = stepper.integrate();
-        match res {
-            Ok(stats) => {} , //println!("Integration stats: {}", stats),
-            Err(e) => return Err("Integration failed for some reason."),
-        }
-        //for (x,y) in stepper.x_out().iter().zip(stepper.y_out()){
-        //    println!("x: {}, y: {}", x, y);
-        //}
+        let stats = stepper.integrate()?;
+        //println!("Integration stats: {}", stats);
 
         Ok(stepper.y_out().clone())
     }
 
-    pub fn numerical_expected_counts(self) -> Result<Vec<f64>, &'static str>{
+    pub fn numerical_expected_counts(self) -> Result<Vec<f64>>{
         let y_out = self.numerical_solution()?;
-        let mut ac1 = y_out.iter().map(|itm| {itm[IDX_ACC_COUNTS]});
+        let ac1 = y_out.iter().map(|itm| {itm[IDX_ACC_COUNTS]});
         let mut ac2 = ac1.clone();
         let _ = ac2.next();
         let expected_counts = ac1.zip(ac2).map(|(itm1,itm2)| {itm2-itm1}).collect();
@@ -393,8 +419,9 @@ mod tests {
             time: 0.0,
             /// LLD minus ULD (ULD are noise), missing values marked with NaN
             counts: 1000.0,
-            background_count_rate: 1.0/60.0,
-            sensitivity: 0.2,
+            background_count_rate: 0.0, //1.0/60.0,
+            // sensitivity is chosen so that 1 Bq/m3 = 1000 counts / 30-min
+            sensitivity: 1000./(3600.0/2.0),
             q_internal: 0.1/60.0,  //volumetric, m3/sec
             q_external: 80.0/60.0/1000.0,  //volumetric, m3/sec
             airt: 21.0, // degC
@@ -414,13 +441,13 @@ mod tests {
     #[test]
     fn can_create_params() {
         let p = DetectorParamsBuilder::default()
-            .exflow(1.0)
+            .delay_time(1.0)
             .build()
             .expect("Detector creation failed");
         // test a default value
         assert!(p.inflow == 1.5 / 60.);
         // test a set value
-        assert!(p.exflow == 1.0);
+        assert!(p.delay_time == 1.0);
         // test default 700L detector
         let p = DetectorParamsBuilder::default()
             .default_700l()
@@ -439,7 +466,8 @@ mod tests {
     #[test]
     fn can_integrate(){
         let p = DetectorParamsBuilder::default().build().unwrap();
-        let radon = vec![1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
+        let radon = vec![1.0, 1.0, 1.0, 1.0, 10.0, 10.0, 1.0, 1.0, 1.0, 1.0, 1.0];
+        //let radon = vec![0.0; 11];
         let mut data = get_timeseries(11);
         let fwd = DetectorForwardModel{
             p: p,
@@ -453,9 +481,22 @@ mod tests {
             cal_begin: 0.0,
             cal_duration: 0.0,
         };
-        //let nsoln = fwd.numerical_solution().expect("integration failed");
+
+        let nsoln = fwd.clone().numerical_solution().expect("integration failed");
+        // diff the counts
+        let mut ac1 = nsoln.iter();
+        let mut ac2 = ac1.clone();
+        let mut ac3 = ac1.clone();
+        let _ = ac2.next();
+        let nsoln_diff: Vec<_> = ac1.zip(ac2).map(|(itm1,itm2)| {itm2-itm1}).collect();
+        println!("{:#?}", nsoln_diff);
+
+        // convert from atoms to Bq
+        let nsoln_conv: Vec<_> = ac3.map( |itm| {itm * LAMRN}).collect();
+        println!("{:#?}", nsoln_conv);
+
         let nec = fwd.numerical_expected_counts().unwrap();
-        println!("{:#?}", nec);
+        println!("Numerical solution, expected counts: {:#?}", nec);
     }
 
     #[test]
@@ -476,7 +517,7 @@ mod tests {
         let mut data = InputTimeSeries::new();
         for ii in 0..300{
             data.push(trec);
-            radon.push( if (ii==0 || ii>60) {0.0} else {1.0});
+            radon.push( if ii==0 || ii>60 {0.0} else {1.0});
         }
         let time_step = 1.0*60.0;
         for (ii,itm) in data.iter_mut().enumerate(){

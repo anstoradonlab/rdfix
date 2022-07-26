@@ -1701,6 +1701,7 @@ dependencies = [
  "finitediff",
  "log",
  "ndarray",
+ "num",
  "ode_solvers",
  "plotlib",
  "plotters",
