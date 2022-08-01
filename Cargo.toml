@@ -9,20 +9,26 @@ edition = "2021"
 derive_builder = "0.11"
 ode_solvers = "0.3"
 emcee = {path="../rust-emcee"}
+rdfix_gf = {path="../rdfix_gf"}
 statrs = "0.15"
 argmin = { version = "0.5", features = ["ctrlc", "ndarrayl", "nalgebral"] }
 autodiff = "0.5"
 anyhow = "1.0"
 env_logger = "0.9"
 log = "0.4"
-ndarray = "0.15"
+ndarray = { version = "0.15.0", features = ["blas"] }
+blas-src = { version = "0.8", features = ["openblas"] }
+openblas-src = { version = "0.10", features = ["cblas", "system"] }
 num = "0.4"
-finitediff = "0.1.4"
+finitediff = {version="0.1.4", features = ["ndarray"]}
 soa_derive = "0.12"
 polars = {version="0.22", features=["dtype-datetime"]}
 debug_plotter = "0.2"
 plotters = "0.3"
 plotlib = "0.5"
-
-[dev-dependencies]
+itertools = "0.10"
 assert_approx_eq = "1.1"
+indicatif = "0.16"
+
+#[dev-dependencies]
+#assert_approx_eq = "1.1"

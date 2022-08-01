@@ -11,14 +11,14 @@
 use derive_builder::Builder;
 //use ode_solvers::dop853::*;
 use ode_solvers::dopri5::*;
+use ode_solvers::rk4::Rk4;
 use ode_solvers::*;
 
 pub mod constants;
-pub mod generated_functions;
 pub mod quickplot;
 
 use constants::*;
-use generated_functions as gf;
+use rdfix_gf::generated_functions as gf;
 
 use core::ops::{Add,Mul};
 
@@ -50,7 +50,7 @@ pub struct DetectorParams {
     /// Screen mesh capture probability (rs) (default of 0.95)
     #[builder(default = "0.95")]
     pub r_screen: f64,
-    /// Scale factor for r_screen (default of 1.0)
+    /// Scale factor for r_screen (default of 0.0)
     #[builder(default = "1.0")]
     pub r_screen_scale: f64,
     /// Overall delay time (lag) of detector (default 0.0 s)
@@ -154,6 +154,8 @@ impl ode_solvers::System<State> for DetectorForwardModel {
         let sensitivity = linear_interpolation(ti, &self.data.sensitivity, tmax);
         let background_count_rate = linear_interpolation(ti, &self.data.background_count_rate, tmax);
         // scale factors (used in inversion)
+        assert!(self.p.exflow_scale >= 0.0);
+        assert!(self.p.r_screen_scale >= 0.0);
         let q_external = q_external * self.p.exflow_scale;
         let r_screen = self.p.r_screen * self.p.r_screen_scale;
         // ambient (or external) radon concentration in atoms per m3
@@ -373,13 +375,18 @@ impl DetectorForwardModel{
         let fac_max = 6.0;
         // keep the step size small because the boundary conditions may change on this time-scale
         let h_max = if dt<60.0 {dt} else {60.0};
-        let h = 0.0;
+        let h = dt/10.0;
         let n_max = 1_000_000;
         let n_stiff = 1_000;
         let out_type = dop_shared::OutputType::Dense;
 
         let mut stepper = Dopri5::from_param(system, t0, tmax, dt, y0, rtol, atol, safety_factor, beta,
-             fac_min, fac_max, h_max, h, n_max, n_stiff, out_type);
+            fac_min, fac_max, h_max, h, n_max, n_stiff, out_type);
+        
+        // Rk4 method has a different interface
+        // let step_size = 10.0;
+        // let mut stepper = Rk4::new(system, t0, y0, tmax, step_size);
+
         let stats = stepper.integrate()?;
         //println!("Integration stats: {}", stats);
 

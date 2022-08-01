@@ -1,5 +1,4 @@
 use rdfix::forward::{DetectorParamsBuilder};
-use rdfix::forward::generated_functions::calc_na_nb_factors;
 
 use rdfix::inverse::{DetectorInverseModel,InversionOptions,InversionOptionsBuilder,fit_inverse_model};
 
@@ -14,7 +13,6 @@ fn main() {
 
     let p = DetectorParamsBuilder::default().build().unwrap();
     println!("Hello, world!, here's the model: {:#?}", p);
-    println!("Here's some Na,Nb factors: {:?}", calc_na_nb_factors(1.0, 3.0, 1e-3));
 
 
     let p = DetectorParamsBuilder::default().build().unwrap();
