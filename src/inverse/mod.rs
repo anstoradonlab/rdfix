@@ -9,13 +9,30 @@ use statrs::distribution::{Continuous, Discrete, LogNormal, Normal, Poisson};
 
 use derive_builder::Builder;
 
-use argmin::prelude::*;
+/*
 use argmin::solver::gradientdescent::SteepestDescent;
 use argmin::solver::linesearch::MoreThuenteLineSearch;
 use argmin::solver::neldermead::NelderMead;
 use argmin::solver::quasinewton::bfgs::BFGS;
 use argmin::solver::trustregion::Steihaug;
 use argmin::solver::trustregion::TrustRegion;
+*/
+
+use argmin::core::{State, Error, Executor, CostFunction, Gradient, Hessian};
+
+
+use argmin::solver::gradientdescent::SteepestDescent;
+use argmin::solver::linesearch::MoreThuenteLineSearch;
+use argmin::solver::quasinewton::BFGS;
+use argmin::solver::trustregion::TrustRegion;
+use argmin::solver::trustregion::Steihaug;
+use argmin::solver::neldermead::NelderMead;
+
+
+use argmin::core::observers::{SlogLogger, ObserverMode};
+
+
+use num;
 
 // use ndarray::{Array, Array1, Array2};
 
@@ -34,6 +51,8 @@ use autodiff::*;
 
 // Link to the BLAS C library
 extern crate blas_src;
+
+type FP = f64;
 
 // Transform a variable defined over [0,1] to a variable defined over [-inf, +inf]
 fn transform_constrained_to_unconstrained(x: f64) -> f64 {
@@ -215,7 +234,7 @@ fn counts_to_concentration(net_counts_per_second: f64, sensitivity: f64) -> f64 
 /// rs, rn0(initial radon conc), exflow
 fn pack_state_vector(
     radon: &[f64],
-    p: DetectorParams,
+    p: DetectorParams<f64, f64>,
     ts: InputTimeSeries,
     opt: InversionOptions,
 ) -> Guess {
@@ -254,23 +273,31 @@ pub struct InversionOptions {
 }
 
 #[derive(Debug, Clone)]
-pub struct DetectorInverseModel {
+pub struct DetectorInverseModel<P, T>
+where
+    P: num::Float + num::FromPrimitive,
+    T: num::Float + num::FromPrimitive,
+{
     /// fixed detector parameters
-    pub p: DetectorParams,
+    pub p: DetectorParams<P, T>,
     /// Options which control how the inversion runs
     pub inv_opts: InversionOptions,
     /// Data
     pub ts: InputTimeSeries,
     /// Forward model
-    pub fwd: DetectorForwardModel,
+    pub fwd: DetectorForwardModel<P, T>,
 }
 
-impl Prob for DetectorInverseModel {
+impl<P, T> Prob for DetectorInverseModel<P, T>
+where
+    P: num::Float + num::FromPrimitive,
+    T: num::Float + num::FromPrimitive,
+{
     fn lnprob(&self, theta: &Guess) -> f64 {
         // Note: invalid prior results are signaled by
         // returning -std::f64::INFINITY
 
-        let mut lp = 0.0;
+        let mut lp = P::zero();
         // Priors
 
         let (mut r_screen_scale, mut exflow_scale, radon_transformed) =
@@ -290,17 +317,17 @@ impl Prob for DetectorInverseModel {
 
         if r_screen_scale < 0.5 {
             //lp += 1.0 / r_screen_scale - 1.0/0.1;
-            lp += (r_screen_scale - 0.5) * 1e3;
+            lp = lp + (r_screen_scale - 0.5) * 1e3;
             r_screen_scale = 0.5;
         } else if r_screen_scale > 1.1 {
-            lp += r_screen_scale - 1.1;
+            lp = lp + r_screen_scale - 1.1;
             r_screen_scale = 1.1;
         }
         if exflow_scale < 0.5 {
-            lp += (exflow_scale - 0.5) * 1e3;
+            lp = lp + (exflow_scale - 0.5) * 1e3;
             exflow_scale = 0.5;
         } else if exflow_scale > 2.0 {
-            lp += exflow_scale - 2.0;
+            lp = lp + exflow_scale - 2.0;
             exflow_scale = 2.0;
         }
 
@@ -308,20 +335,22 @@ impl Prob for DetectorInverseModel {
 
         let r_screen_scale_mu = 1.0.ln();
         let r_screen_scale_sigma = self.inv_opts.r_screen_sigma;
-        ln_prior += LogNormal::new(r_screen_scale_mu, r_screen_scale_sigma)
-            .unwrap()
-            .ln_pdf(r_screen_scale);
+        ln_prior = ln_prior
+            + LogNormal::new(r_screen_scale_mu, r_screen_scale_sigma)
+                .unwrap()
+                .ln_pdf(r_screen_scale);
 
         // TODO: get exflow from data instead of from the parameters
         let exflow_scale_mu = 1.0.ln();
         let exflow_sigma = self.inv_opts.exflow_sigma;
-        ln_prior += LogNormal::new(exflow_scale_mu, exflow_sigma)
-            .unwrap()
-            .ln_pdf(exflow_scale);
+        ln_prior = ln_prior
+            + LogNormal::new(exflow_scale_mu, exflow_sigma)
+                .unwrap()
+                .ln_pdf(exflow_scale);
 
         // println!("{} {} {} {} || {} {}", r_screen_mu, r_screen_sigma, exflow_mu, exflow_sigma, r_screen, exflow);
 
-        lp += ln_prior;
+        lp = lp + ln_prior;
 
         // Likelihood
         let mut fwd = self.fwd.clone();
@@ -374,7 +403,50 @@ impl Prob for DetectorInverseModel {
     }
 }
 
-impl ArgminOp for DetectorInverseModel {
+
+impl CostFunction for DetectorInverseModel<f64, f64> {
+    type Param = ndarray::Array1<f64>;
+    type Output = f64;
+
+    fn cost(&self, param: &Self::Param) -> Result<Self::Output, Error> {
+        // convert into emcee's Guess.  For now, just abuse .clone()
+        // and hope that this either doesn't matter to runtime or that
+        // perhaps the compiler will optimize it away.
+        let guess = Guess {
+            values: param.clone().into_raw_vec(),
+        };
+        let minus_lp = -self.lnprob(&guess);
+        // TODO: if lp is -std::f64::INFINITY then we should probably
+        // return an error
+        Ok(minus_lp)
+    }
+}
+
+impl Gradient for DetectorInverseModel<f64, f64> {
+    type Param = ndarray::Array1<f64>;
+    type Gradient = ndarray::Array1<f64>;
+
+    fn gradient(&self, param: &Self::Param) -> std::result::Result<Self::Gradient, Error> {
+        Ok((*param).forward_diff(&|x| self.apply(x).unwrap()))
+    }
+
+}
+
+impl Hessian for DetectorForwardModel<f64, f64> {
+    type Param = ndarray::Array1<f64>;
+    type Hessian = ndarray::Array2<f64>;
+
+    fn hessian(&self, param: &Self::Param) -> std::result::Result<Self::Hessian, Error> {
+        Ok((*param).forward_hessian(&|x| self.gradient(x).unwrap()))
+    }
+}
+
+/*
+impl<P, T> ArgminOp for DetectorInverseModel<P, T>
+where
+    P: num::Float + num::FromPrimitive,
+    T: num::Float + num::FromPrimitive,
+{
     // -- most of this is boilerplate from argmin docs
     // Type of the parameter vector
     type Param = ndarray::Array1<f64>;
@@ -412,6 +484,7 @@ impl ArgminOp for DetectorInverseModel {
         Ok((*p).forward_hessian(&|x| self.gradient(x).unwrap()))
     }
 }
+*/
 
 fn calc_radon_without_deconvolution(ts: &InputTimeSeries, time_step: f64) -> Vec<f64> {
     ts.iter()
@@ -423,7 +496,8 @@ fn calc_radon_without_deconvolution(ts: &InputTimeSeries, time_step: f64) -> Vec
 }
 
 pub fn fit_inverse_model(
-    p: DetectorParams,
+    // TODO: differentiable types for the first argument
+    p: DetectorParams<f64, f64>,
     inv_opts: InversionOptions,
     ts: InputTimeSeries,
 ) -> Result<(), Error> {
@@ -468,7 +542,7 @@ pub fn fit_inverse_model(
         simplex.push(v);
     }
     let nm_solver: NelderMead<ndarray::Array1<f64>, f64> =
-        NelderMead::new().with_initial_params(simplex);
+        NelderMead::new(simplex);
 
     // a few different linesearch options
 
@@ -483,10 +557,14 @@ pub fn fit_inverse_model(
     let res = match ARGMIN_OPTION {
         1 => Executor::new(
             cost,
-            TrustRegion::new(Steihaug::new()).radius(0.1),
-            init_param.values.into(),
+            TrustRegion::new(Steihaug::new()))
+            .configure(|state| {
+                state
+                    .param(values.into())
+                    .radius(0.1)
+            }
         )
-        .add_observer(ArgminSlogLogger::term(), ObserverMode::Every(100))
+        .add_observer(SlogLogger::term(), ObserverMode::Every(100))
         .max_iters(map_max_iterations)
         .run()
         .unwrap(),
@@ -495,7 +573,7 @@ pub fn fit_inverse_model(
         //unimplemented!(),
         {
             Executor::new(cost, nm_solver, init_param.values.into())
-                .add_observer(ArgminSlogLogger::term(), ObserverMode::Every(100))
+                .add_observer(SlogLogger::term(), ObserverMode::Every(100))
                 .max_iters(5000) // Probably use 20k here
                 .run()
                 .unwrap()
@@ -506,7 +584,7 @@ pub fn fit_inverse_model(
             BFGS::new(init_inverse_hessian, linesearch3),
             init_param.values.into(),
         )
-        .add_observer(ArgminSlogLogger::term(), ObserverMode::Every(1))
+        .add_observer(SlogLogger::term(), ObserverMode::Every(1))
         .max_iters(map_max_iterations)
         .run()
         .unwrap(),
@@ -516,7 +594,7 @@ pub fn fit_inverse_model(
             SteepestDescent::new(linesearch3),
             init_param.values.into(),
         )
-        .add_observer(ArgminSlogLogger::term(), ObserverMode::Every(100))
+        .add_observer(SlogLogger::term(), ObserverMode::Every(100))
         .max_iters(map_max_iterations)
         .run()
         .unwrap(),
