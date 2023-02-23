@@ -7,6 +7,30 @@
 // this amounts to: use BGFS or BGFS-L, if you're happy to evaluate gradients, else
 // use the Nelder-Mead or Powell methods).
 
+
+/* Note: approach for generic numbers which can support autodiff
+
+1. Use a trait bound num_traits::Float (or, equivalently, num::Float) on generic type "F"
+```
+use num_traits::Float
+
+fn testfunc<F>(x:F) -> F
+where F: Float
+{
+    x + x
+}
+```
+2. to convert from literals, use 
+```
+F::from(1.0).unwrap()
+```
+3. to convert into other types, e.g. for indexing an array or whatever, use
+```
+let idx = x.to_usize().unwrap();
+```
+
+*/
+
 use derive_builder::Builder;
 //use ode_solvers::dop853::*;
 use ode_solvers::dopri5::*;
@@ -17,9 +41,8 @@ pub mod quickplot;
 use super::{InputRecord, InputRecordVec, InputTimeSeries};
 use anyhow::Result;
 use constants::*;
-use core::ops::{Add, Mul};
 use num;
-use num::FromPrimitive;
+use num_traits::Float;
 use rdfix_gf::generated_functions as gf;
 
 pub enum Parameter {
@@ -30,40 +53,40 @@ pub enum Parameter {
 #[derive(Debug, Clone, Builder)]
 pub struct DetectorParams<P, T>
 where
-    //P : potentially differentiably, T: primitive floating point
-    P: num::Float + num::FromPrimitive,
-    T: num::Float + num::FromPrimitive,
+    //P : potentially differentiably (e.g. autodiff's type), T: primitive floating point (f64, f32)
+    P: Float,
+    T: Float,
 {
     /// External flow rate scale factor (default 1.0)
     /// The external flow rate is taken from the data file
-    #[builder(default = "T::from_f64(1.0).unwrap()")]
+    #[builder(default = "T::from(1.0).unwrap()")]
     pub exflow_scale: T,
     /// 1500 L in about 3 minutes in units of m3/s
-    #[builder(default = "T::from_f64(1.5/60.).unwrap()")]
+    #[builder(default = "T::from(1.5/60.).unwrap()")]
     pub inflow: T,
     /// Main radon delay volume (default 1.5 m3)
-    #[builder(default = "T::from_f64(1.5).unwrap()")]
+    #[builder(default = "T::from(1.5).unwrap()")]
     pub volume: T,
     /// Net efficiency of detector (default of 0.2)
-    #[builder(default = "T::from_f64(0.2).unwrap()")]
+    #[builder(default = "T::from(0.2).unwrap()")]
     pub sensitivity: T,
     /// Screen mesh capture probability (rs) (default of 0.95)
-    #[builder(default = "T::from_f64(0.95).unwrap()")]
+    #[builder(default = "T::from(0.95).unwrap()")]
     pub r_screen: T,
     /// Scale factor for r_screen (default of 0.0)
-    #[builder(default = "P::from_f64(1.0).unwrap()")]
+    #[builder(default = "P::from(1.0).unwrap()")]
     pub r_screen_scale: P,
     /// Overall delay time (lag) of detector (default 0.0 s)
-    #[builder(default = "T::from_f64(0.0).unwrap()")]
+    #[builder(default = "T::from(0.0).unwrap()")]
     pub delay_time: T,
     /// Volume of external delay tank number 1 (default 0.2 m3)
-    #[builder(default = "T::from_f64(0.2).unwrap()")]
+    #[builder(default = "T::from(0.2).unwrap()")]
     pub volume_delay_1: T,
     /// Volume of external delay tank number 2 (default 0.0 m3)
-    #[builder(default = "T::from_f64(0.0).unwrap()")]
+    #[builder(default = "T::from(0.0).unwrap()")]
     pub volume_delay_2: T,
     /// Time constant for plateout onto detector walls (default 1/300 sec)
-    #[builder(default = "T::from_f64(1.0/300.0).unwrap()")]
+    #[builder(default = "T::from(1.0/300.0).unwrap()")]
     pub plateout_time_constant: T,
 }
 
@@ -89,52 +112,54 @@ where
 #[derive(Debug, Clone, Builder)]
 pub struct DetectorForwardModel<P, T>
 where
-    P: num_traits::Float + num::FromPrimitive,
-    T: num_traits::Float + num::FromPrimitive,
+    P: num_traits::Float,
+    T: num_traits::Float,
 {
     #[builder(default = "DetectorParamsBuilder::default().build().unwrap()")]
     pub p: DetectorParams<P, T>,
     pub data: InputTimeSeries,
     pub time_step: T,
     pub radon: Vec<T>,
-    #[builder(default = "T::from_f64(0.0).unwrap()")]
+    #[builder(default = "T::from(0.0).unwrap()")]
     pub inj_source_strength: T,
-    #[builder(default = "T::from_f64(0.0).unwrap()")]
+    #[builder(default = "T::from(0.0).unwrap()")]
     pub inj_begin: T,
-    #[builder(default = "T::from_f64(0.0).unwrap()")]
+    #[builder(default = "T::from(0.0).unwrap()")]
     pub inj_duration: T,
-    #[builder(default = "T::from_f64(0.0).unwrap()")]
+    #[builder(default = "T::from(0.0).unwrap()")]
     pub cal_source_strength: T,
-    #[builder(default = "T::from_f64(0.0).unwrap()")]
+    #[builder(default = "T::from(0.0).unwrap()")]
     pub cal_begin: T,
-    #[builder(default = "T::from_f64(0.0).unwrap()")]
+    #[builder(default = "T::from(0.0).unwrap()")]
     pub cal_duration: T,
 }
 
 /// interpolation utility functions
-fn linear_interpolation<T>(ti: f64, y: &[T], tmax: f64) -> T
+fn linear_interpolation<P,T>(ti: P, y: &[T], tmax: T) -> P
 where
-    T: Add<Output = T> + Mul<f64, Output = T> + Copy,
+    T: Float,
+    P: Float,
 {
-    assert!(ti <= tmax);
-    assert!(ti >= 0.0);
-    let time_step = tmax / (y.len() - 1) as f64;
-    let p = ti / time_step;
-    let idx0 = p.floor() as usize;
-    let idx1 = p.ceil() as usize;
-    let w1 = p - (idx0 as f64);
-    let w0 = 1.0 - w1;
-    y[idx0] * w0 + y[idx1] * w1
+    assert!(ti <= P::from(tmax).unwrap());
+    assert!(ti >= P::from(0.0).unwrap());
+    let time_step = tmax / T::from(y.len() - 1).unwrap();
+    let p = ti / P::from(time_step).unwrap();
+    let idx0 = p.floor().to_usize().unwrap();
+    let idx1 = p.ceil().to_usize().unwrap();
+    let w1 = p - P::from(idx0).unwrap();
+    let w0 = P::from(1.0).unwrap() - w1;
+    P::from(y[idx0]).unwrap() * w0 + P::from(y[idx1]).unwrap() * w1
 }
 
-fn stepwise_interpolation<T>(ti: f64, y: &[T], tmax: f64) -> T
+fn stepwise_interpolation<P,T>(ti: P, y: &[T], tmax: T) -> P
 where
-    T: Add<Output = T> + Mul<f64, Output = T> + Copy,
+    P: Float,
+    T: Float,
 {
-    let time_step = tmax / (y.len() - 1) as f64;
-    let p = ti / time_step;
-    let idx1 = p.ceil() as usize;
-    y[idx1]
+    let time_step = tmax / T::from(y.len() - 1).unwrap();
+    let p = ti / P::from(time_step).unwrap();
+    let idx1 = p.ceil().to_usize().unwrap();
+    P::from(y[idx1]).unwrap()
 }
 
 /// state vector for detector
@@ -142,16 +167,20 @@ type FP = f64;
 type State = SVector<FP, NUM_STATE_VARIABLES>;
 //type State = DVector<f64>;
 
+
+impl<P,T> rate_of_change
+
+
 impl<P, T> ode_solvers::System<State> for DetectorForwardModel<P, T>
 where
-    P: num::Float + num::FromPrimitive,
-    T: num::Float + num::FromPrimitive,
+    P: num::Float,
+    T: num::Float,
 {
     fn system(&self, t: T, y: &State, dy: &mut State) {
         // TODO: enforce this earlier
         assert!(self.radon.len() == self.data.len());
         // determine values interpolated in time
-        let tmax = T::from_usize(self.data.len() - 1).unwrap() * self.time_step;
+        let tmax = T::from(self.data.len() - 1).unwrap() * self.time_step;
         let t_delay = self.p.delay_time;
         let mut ti = t - t_delay;
         if ti < T::zero() {

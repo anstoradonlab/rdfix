@@ -317,7 +317,7 @@ where
 
         if r_screen_scale < 0.5 {
             //lp += 1.0 / r_screen_scale - 1.0/0.1;
-            lp = lp + (r_screen_scale - 0.5) * 1e3;
+            lp = lp + (r_screen_scale - 0.5.into()) * 1e3.into();
             r_screen_scale = 0.5;
         } else if r_screen_scale > 1.1 {
             lp = lp + r_screen_scale - 1.1;

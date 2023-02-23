@@ -2147,6 +2147,9 @@ dependencies = [
 [[package]]
 name = "rdfix_gf"
 version = "0.1.0"
+dependencies = [
+ "num-traits",
+]
 
 [[package]]
 name = "rdrand"
