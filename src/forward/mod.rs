@@ -168,8 +168,11 @@ type State = SVector<FP, NUM_STATE_VARIABLES>;
 //type State = DVector<f64>;
 
 
-impl<P,T> rate_of_change
-
+impl<T:Float, P:Float> DetectorForwardModel<P,T>{
+    fn rate_of_change(&self, t: T, y: &State, dy: &mut State){
+        todo!();
+    }
+}
 
 impl<P, T> ode_solvers::System<State> for DetectorForwardModel<P, T>
 where

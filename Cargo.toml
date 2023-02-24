@@ -8,7 +8,6 @@ edition = "2021"
 [dependencies]
 derive_builder = "0.12"
 ode_solvers = "0.3"
-emcee = {path="../rust-emcee"}
 rdfix_gf = {path="../rdfix_gf"}
 statrs = "0.16"
 autodiff = "0.6"
@@ -31,6 +30,9 @@ indicatif = "0.17"
 num-traits = "0.2.15"
 argmin = {version="0.8.0", default-features=false, features=["slog-logger"]}
 cobyla = "0.3.2"
+hammer-and-sample = "0.1"
+rand = "0.8.5"
+rand_pcg = "0.3.1"
 
 #[dev-dependencies]
 #assert_approx_eq = "1.1"

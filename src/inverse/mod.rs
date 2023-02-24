@@ -2,8 +2,6 @@ use super::forward::{
     DetectorForwardModel, DetectorForwardModelBuilder, DetectorParams, DetectorParamsBuilder,
 };
 use argmin::solver::linesearch::HagerZhangLineSearch;
-use emcee::EnsembleSampler;
-use emcee::{Guess, Prob};
 use ndarray::Array2;
 use statrs::distribution::{Continuous, Discrete, LogNormal, Normal, Poisson};
 
@@ -32,7 +30,13 @@ use argmin::solver::neldermead::NelderMead;
 use argmin::core::observers::{SlogLogger, ObserverMode};
 
 
-use num;
+use num::Float;
+
+use hammer_and_sample::{sample, Model, Serial};
+use rand::{Rng, SeedableRng};
+use rand_pcg::Pcg64;
+
+
 
 // use ndarray::{Array, Array1, Array2};
 
@@ -160,16 +164,18 @@ fn log2_usize(num: usize) -> usize {
 }
 
 // Transform radon concentrations from actual values into a simpler-to-sample form
-fn transform_radon_concs(radon_conc: &mut [f64]) -> Result<()> {
+fn transform_radon_concs<P>(radon_conc: &mut [P]) -> Result<()> 
+where P: Float,
+{
     let n = radon_conc.len();
     assert!(is_power_of_two(n));
     let num_levels = log2_usize(n);
     let mut row = radon_conc.to_owned();
-    let mut params: Vec<f64> = Vec::new();
+    let mut params: Vec<P> = Vec::new();
     for _ in 0..num_levels {
         // pair elements, and then take average of consecutive elements
-        params.extend(row.chunks_exact(2).map(|w| w[0] / ((w[0] + w[1]) / 2.0)));
-        row = row.chunks_exact(2).map(|w| (w[0] + w[1]) / 2.0).collect();
+        params.extend(row.chunks_exact(2).map(|w| w[0] / ((w[0] + w[1]) / P::from(2.0).unwrap())));
+        row = row.chunks_exact(2).map(|w| (w[0] + w[1]) / P::from(2.0).unwrap()).collect();
         //row.clear();
         //row.extend(tmp.iter());
         //println!("{:?}", row);
@@ -188,7 +194,9 @@ fn transform_radon_concs(radon_conc: &mut [f64]) -> Result<()> {
 }
 
 // Reverse transform radon concentration (from sampling form back to true values)
-fn inverse_transform_radon_concs(p: &mut [f64]) -> Result<()> {
+fn inverse_transform_radon_concs<P>(p: &mut [P]) -> Result<()> 
+where P: Float,
+{
     let npts = p.len();
     assert!(is_power_of_two(npts));
     let num_levels = log2_usize(npts);
@@ -197,7 +205,7 @@ fn inverse_transform_radon_concs(p: &mut [f64]) -> Result<()> {
     let mut params = p.to_owned();
 
     let mut n = 1;
-    let mut a: Vec<f64> = vec![params.pop().unwrap()];
+    let mut a: Vec<P> = vec![params.pop().unwrap()];
 
     let mut rp = &params[..];
 
@@ -211,7 +219,7 @@ fn inverse_transform_radon_concs(p: &mut [f64]) -> Result<()> {
         a = izip!(a, p)
             .map(|ap| {
                 let (a, p) = ap;
-                [a * p, a * (2.0 - p)]
+                [a * p, a * ( P::from(2.0).unwrap() - p)]
             })
             .flatten()
             .collect();
@@ -226,18 +234,23 @@ fn inverse_transform_radon_concs(p: &mut [f64]) -> Result<()> {
     Ok(())
 }
 
-fn counts_to_concentration(net_counts_per_second: f64, sensitivity: f64) -> f64 {
+fn counts_to_concentration<P>(net_counts_per_second: P, sensitivity: P) -> P 
+where P:Float,
+{
     net_counts_per_second / sensitivity
 }
 
 /// Pack model description into a state vector
 /// rs, rn0(initial radon conc), exflow
-fn pack_state_vector(
-    radon: &[f64],
-    p: DetectorParams<f64, f64>,
+fn pack_state_vector<P,T>(
+    radon: &[P],
+    p: DetectorParams<P, T>,
     ts: InputTimeSeries,
     opt: InversionOptions,
-) -> Guess {
+) -> Vec<P> 
+where P: Float,
+T: Float,
+{
     let mut values = Vec::new();
 
     let mut radon_transformed = radon.to_owned();
@@ -247,14 +260,16 @@ fn pack_state_vector(
     values.push(p.exflow_scale);
     values.extend(radon_transformed.iter());
 
-    Guess { values }
+    values
 }
 
 // Unpack the state vector into its parts
-fn unpack_state_vector<'a>(
-    guess: &'a Guess,
+fn unpack_state_vector<'a,P>(
+    guess: &'a &[P],
     _inv_opts: &InversionOptions,
-) -> (f64, f64, &'a [f64]) {
+) -> (P, P, &'a [P])
+where P: Float
+{
     let r_screen_scale = guess.values[0];
     let exflow_scale = guess.values[1];
     let radon_transformed = &guess.values[2..];
@@ -275,8 +290,8 @@ pub struct InversionOptions {
 #[derive(Debug, Clone)]
 pub struct DetectorInverseModel<P, T>
 where
-    P: num::Float + num::FromPrimitive,
-    T: num::Float + num::FromPrimitive,
+    P: Float,
+    T: Float,
 {
     /// fixed detector parameters
     pub p: DetectorParams<P, T>,
@@ -288,12 +303,26 @@ where
     pub fwd: DetectorForwardModel<P, T>,
 }
 
-impl<P, T> Prob for DetectorInverseModel<P, T>
-where
-    P: num::Float + num::FromPrimitive,
-    T: num::Float + num::FromPrimitive,
+
+/*
+   Model trait for Hammer and Sample (emcee sampler)
+   ref: https://docs.rs/hammer-and-sample/latest/hammer_and_sample/
+*/
+impl Model for DetectorInverseModel<f64, f64>{
+    type Params = Vec<f64>;
+    fn log_prob(&self, state: &Self::Params) -> f64 {
+        todo!();
+    }
+}
+
+
+impl<P:Float,T:Float> DetectorInverseModel<P,T>
 {
-    fn lnprob(&self, theta: &Guess) -> f64 {
+    /* 
+    Generic lnprob function which can take differentable values and is therefore
+    usable with the autdiff crate
+    */
+    fn generic_lnprob(&self, theta: &[P]) -> f64 {
         // Note: invalid prior results are signaled by
         // returning -std::f64::INFINITY
 
@@ -394,13 +423,6 @@ where
         lp
     }
 
-    fn lnlike(&self, params: &Guess) -> f64 {
-        unimplemented!()
-    }
-
-    fn lnprior(&self, params: &Guess) -> f64 {
-        unimplemented!()
-    }
 }
 
 
@@ -409,13 +431,7 @@ impl CostFunction for DetectorInverseModel<f64, f64> {
     type Output = f64;
 
     fn cost(&self, param: &Self::Param) -> Result<Self::Output, Error> {
-        // convert into emcee's Guess.  For now, just abuse .clone()
-        // and hope that this either doesn't matter to runtime or that
-        // perhaps the compiler will optimize it away.
-        let guess = Guess {
-            values: param.clone().into_raw_vec(),
-        };
-        let minus_lp = -self.lnprob(&guess);
+        let minus_lp = -self.generic_lnprob(&param);
         // TODO: if lp is -std::f64::INFINITY then we should probably
         // return an error
         Ok(minus_lp)
@@ -444,8 +460,8 @@ impl Hessian for DetectorForwardModel<f64, f64> {
 /*
 impl<P, T> ArgminOp for DetectorInverseModel<P, T>
 where
-    P: num::Float + num::FromPrimitive,
-    T: num::Float + num::FromPrimitive,
+    P: Float,
+    T: Float,
 {
     // -- most of this is boilerplate from argmin docs
     // Type of the parameter vector
@@ -527,7 +543,7 @@ pub fn fit_inverse_model(
     let inverse_model = cost.clone();
 
     // 2. Optimisation (MAP)
-    const ARGMIN_OPTION: u32 = 2;
+    const ARGMIN_OPTION: u32 = 1;
 
     // Nelder Mead initial simplex
     // Strategy for initialisation: https://stackoverflow.com/questions/17928010/choosing-the-initial-simplex-in-the-nelder-mead-optimization-algorithm
@@ -560,7 +576,7 @@ pub fn fit_inverse_model(
             TrustRegion::new(Steihaug::new()))
             .configure(|state| {
                 state
-                    .param(values.into())
+                    .param(init_param.values.clone().into())
                     .radius(0.1)
             }
         )
@@ -569,6 +585,7 @@ pub fn fit_inverse_model(
         .run()
         .unwrap(),
 
+/* disable other options for now.  This needs updating for new API.
         2 =>
         //unimplemented!(),
         {
@@ -598,15 +615,14 @@ pub fn fit_inverse_model(
         .max_iters(map_max_iterations)
         .run()
         .unwrap(),
-
+*/
         _ => unimplemented!(),
     };
 
     println!("MAP optimisation complete: {}", res);
     let map = res.state.get_best_param();
-    let v = map.into_raw_vec().clone();
-    let map_as_guess = Guess { values: v };
-    let (_, _, transformed_map_radon) = unpack_state_vector(&map_as_guess, &inv_opts);
+    let v: Vec<f64> = map.into_raw_vec().iter().collect();
+    let (_, _, transformed_map_radon) = unpack_state_vector(&v, &inv_opts);
     let mut map_radon = &mut transformed_map_radon.to_owned();
     inverse_transform_radon_concs(&mut map_radon).unwrap();
 
@@ -615,32 +631,40 @@ pub fn fit_inverse_model(
 
     // 3. Generate initial guess around the MAP point
 
-    //convert result back from res to Guess
+    
     let nwalkers = 6 * ndims; // TODO, add to inv_opts
-    let initial_positions = map_as_guess.create_initial_guess(nwalkers);
+    let walkers = (0..nwalkers).map(|seed| {
+        let mut rng = Pcg64::seed_from_u64(seed as u64);
+
+        let p = v.iter().map(|p_i| {p_i + rng.gen_range(-1e-6..=1.0e-6)}).collect();
+
+        (p, rng)
+    });
+
+
 
     // 4. Run the emcee sampler
-    let ndim = map_as_guess.values.len();
+    let ndim = v.len();
     let niterations = 5000;
 
     println!("Running MCMC");
-    let mut sampler =
-        emcee::EnsembleSampler::new(nwalkers, ndim, &inverse_model).expect("creating sampler");
+    //let mut sampler =
+    //    emcee::EnsembleSampler::new(nwalkers, ndim, &inverse_model).expect("creating sampler");
 
-    // warm-up samples
-    sampler
-        .run_mcmc(&initial_positions, niterations)
-        .expect("Sampling failed");
-    sampler.reset();
-    // samples
-    sampler
-        .run_mcmc(&initial_positions, niterations)
-        .expect("Sampling failed");
+    let (chain, accepted) = sample(&inverse_model, walkers, niterations*2, &Serial);
+
+
+    // half of the iterations are burn-in
+    let chain = &chain[niterations * nwalkers..];
+
+    // samples are now in chain
+    // TODO: reshape into nsamples * nwalkers array
+    let acceptance_fraction = accepted as f64 / niterations as f64;
 
     // 5. Wrangle the output and compute statistics
     println!(
         "Complete.  Acceptance fraction: {:?}",
-        sampler.acceptance_fraction()
+        acceptance_fraction
     );
 
     Ok(())
