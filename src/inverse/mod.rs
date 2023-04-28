@@ -16,27 +16,22 @@ use argmin::solver::trustregion::Steihaug;
 use argmin::solver::trustregion::TrustRegion;
 */
 
-use argmin::core::{State, Error, Executor, CostFunction, Gradient, Hessian};
-
+use argmin::core::{CostFunction, Error, Executor, Gradient, Hessian, State};
 
 use argmin::solver::gradientdescent::SteepestDescent;
 use argmin::solver::linesearch::MoreThuenteLineSearch;
-use argmin::solver::quasinewton::BFGS;
-use argmin::solver::trustregion::TrustRegion;
-use argmin::solver::trustregion::Steihaug;
 use argmin::solver::neldermead::NelderMead;
+use argmin::solver::quasinewton::BFGS;
+use argmin::solver::trustregion::Steihaug;
+use argmin::solver::trustregion::TrustRegion;
 
-
-use argmin::core::observers::{SlogLogger, ObserverMode};
-
+use argmin::core::observers::{ObserverMode, SlogLogger};
 
 use num::Float;
 
 use hammer_and_sample::{sample, Model, Serial};
 use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg64;
-
-
 
 // use ndarray::{Array, Array1, Array2};
 
@@ -164,8 +159,9 @@ fn log2_usize(num: usize) -> usize {
 }
 
 // Transform radon concentrations from actual values into a simpler-to-sample form
-fn transform_radon_concs<P>(radon_conc: &mut [P]) -> Result<()> 
-where P: Float,
+fn transform_radon_concs<P>(radon_conc: &mut [P]) -> Result<()>
+where
+    P: Float,
 {
     let n = radon_conc.len();
     assert!(is_power_of_two(n));
@@ -174,8 +170,14 @@ where P: Float,
     let mut params: Vec<P> = Vec::new();
     for _ in 0..num_levels {
         // pair elements, and then take average of consecutive elements
-        params.extend(row.chunks_exact(2).map(|w| w[0] / ((w[0] + w[1]) / P::from(2.0).unwrap())));
-        row = row.chunks_exact(2).map(|w| (w[0] + w[1]) / P::from(2.0).unwrap()).collect();
+        params.extend(
+            row.chunks_exact(2)
+                .map(|w| w[0] / ((w[0] + w[1]) / P::from(2.0).unwrap())),
+        );
+        row = row
+            .chunks_exact(2)
+            .map(|w| (w[0] + w[1]) / P::from(2.0).unwrap())
+            .collect();
         //row.clear();
         //row.extend(tmp.iter());
         //println!("{:?}", row);
@@ -193,9 +195,13 @@ where P: Float,
     Ok(())
 }
 
+
+/*
+
 // Reverse transform radon concentration (from sampling form back to true values)
-fn inverse_transform_radon_concs<P>(p: &mut [P]) -> Result<()> 
-where P: Float,
+fn inverse_transform_radon_concs<P>(p: &mut [P]) -> Result<()>
+where
+    P: Float,
 {
     let npts = p.len();
     assert!(is_power_of_two(npts));
@@ -219,7 +225,7 @@ where P: Float,
         a = izip!(a, p)
             .map(|ap| {
                 let (a, p) = ap;
-                [a * p, a * ( P::from(2.0).unwrap() - p)]
+                [a * p, a * (P::from(2.0).unwrap() - p)]
             })
             .flatten()
             .collect();
@@ -234,22 +240,23 @@ where P: Float,
     Ok(())
 }
 
-fn counts_to_concentration<P>(net_counts_per_second: P, sensitivity: P) -> P 
-where P:Float,
+fn counts_to_concentration<P>(net_counts_per_second: P, sensitivity: P) -> P
+where
+    P: Float,
 {
     net_counts_per_second / sensitivity
 }
 
 /// Pack model description into a state vector
 /// rs, rn0(initial radon conc), exflow
-fn pack_state_vector<P,T>(
+fn pack_state_vector<P>(
     radon: &[P],
-    p: DetectorParams<P, T>,
+    p: DetectorParams<P>,
     ts: InputTimeSeries,
     opt: InversionOptions,
-) -> Vec<P> 
-where P: Float,
-T: Float,
+) -> Vec<P>
+where
+    P: Float,
 {
     let mut values = Vec::new();
 
@@ -264,11 +271,9 @@ T: Float,
 }
 
 // Unpack the state vector into its parts
-fn unpack_state_vector<'a,P>(
-    guess: &'a &[P],
-    _inv_opts: &InversionOptions,
-) -> (P, P, &'a [P])
-where P: Float
+fn unpack_state_vector<'a, P>(guess: &'a &[P], _inv_opts: &InversionOptions) -> (P, P, &'a [P])
+where
+    P: Float,
 {
     let r_screen_scale = guess.values[0];
     let exflow_scale = guess.values[1];
@@ -288,37 +293,33 @@ pub struct InversionOptions {
 }
 
 #[derive(Debug, Clone)]
-pub struct DetectorInverseModel<P, T>
+pub struct DetectorInverseModel<P>
 where
     P: Float,
-    T: Float,
 {
     /// fixed detector parameters
-    pub p: DetectorParams<P, T>,
+    pub p: DetectorParams<P>,
     /// Options which control how the inversion runs
     pub inv_opts: InversionOptions,
     /// Data
     pub ts: InputTimeSeries,
     /// Forward model
-    pub fwd: DetectorForwardModel<P, T>,
+    pub fwd: DetectorForwardModel<P>,
 }
-
 
 /*
    Model trait for Hammer and Sample (emcee sampler)
    ref: https://docs.rs/hammer-and-sample/latest/hammer_and_sample/
 */
-impl Model for DetectorInverseModel<f64, f64>{
+impl Model for DetectorInverseModel<f64> {
     type Params = Vec<f64>;
     fn log_prob(&self, state: &Self::Params) -> f64 {
         todo!();
     }
 }
 
-
-impl<P:Float,T:Float> DetectorInverseModel<P,T>
-{
-    /* 
+impl<P: Float> DetectorInverseModel<P> {
+    /*
     Generic lnprob function which can take differentable values and is therefore
     usable with the autdiff crate
     */
@@ -422,11 +423,9 @@ impl<P:Float,T:Float> DetectorInverseModel<P,T>
         }
         lp
     }
-
 }
 
-
-impl CostFunction for DetectorInverseModel<f64, f64> {
+impl CostFunction for DetectorInverseModel<f64> {
     type Param = ndarray::Array1<f64>;
     type Output = f64;
 
@@ -438,17 +437,16 @@ impl CostFunction for DetectorInverseModel<f64, f64> {
     }
 }
 
-impl Gradient for DetectorInverseModel<f64, f64> {
+impl Gradient for DetectorInverseModel<f64> {
     type Param = ndarray::Array1<f64>;
     type Gradient = ndarray::Array1<f64>;
 
     fn gradient(&self, param: &Self::Param) -> std::result::Result<Self::Gradient, Error> {
         Ok((*param).forward_diff(&|x| self.apply(x).unwrap()))
     }
-
 }
 
-impl Hessian for DetectorForwardModel<f64, f64> {
+impl Hessian for DetectorForwardModel<f64> {
     type Param = ndarray::Array1<f64>;
     type Hessian = ndarray::Array2<f64>;
 
@@ -513,7 +511,7 @@ fn calc_radon_without_deconvolution(ts: &InputTimeSeries, time_step: f64) -> Vec
 
 pub fn fit_inverse_model(
     // TODO: differentiable types for the first argument
-    p: DetectorParams<f64, f64>,
+    p: DetectorParams<f64>,
     inv_opts: InversionOptions,
     ts: InputTimeSeries,
 ) -> Result<(), Error> {
@@ -557,8 +555,7 @@ pub fn fit_inverse_model(
         v[ii] += dx;
         simplex.push(v);
     }
-    let nm_solver: NelderMead<ndarray::Array1<f64>, f64> =
-        NelderMead::new(simplex);
+    let nm_solver: NelderMead<ndarray::Array1<f64>, f64> = NelderMead::new(simplex);
 
     // a few different linesearch options
 
@@ -571,51 +568,44 @@ pub fn fit_inverse_model(
 
     let map_max_iterations = 20000; //TODO: options
     let res = match ARGMIN_OPTION {
-        1 => Executor::new(
-            cost,
-            TrustRegion::new(Steihaug::new()))
-            .configure(|state| {
-                state
-                    .param(init_param.values.clone().into())
-                    .radius(0.1)
-            }
-        )
-        .add_observer(SlogLogger::term(), ObserverMode::Every(100))
-        .max_iters(map_max_iterations)
-        .run()
-        .unwrap(),
+        1 => Executor::new(cost, TrustRegion::new(Steihaug::new()))
+            .configure(|state| state.param(init_param.values.clone().into()).radius(0.1))
+            .add_observer(SlogLogger::term(), ObserverMode::Every(100))
+            .max_iters(map_max_iterations)
+            .run()
+            .unwrap(),
 
-/* disable other options for now.  This needs updating for new API.
-        2 =>
-        //unimplemented!(),
-        {
-            Executor::new(cost, nm_solver, init_param.values.into())
-                .add_observer(SlogLogger::term(), ObserverMode::Every(100))
-                .max_iters(5000) // Probably use 20k here
+        /* disable other options for now.  This needs updating for new API.
+                2 =>
+                //unimplemented!(),
+                {
+                    Executor::new(cost, nm_solver, init_param.values.into())
+                        .add_observer(SlogLogger::term(), ObserverMode::Every(100))
+                        .max_iters(5000) // Probably use 20k here
+                        .run()
+                        .unwrap()
+                }
+
+                3 => Executor::new(
+                    cost,
+                    BFGS::new(init_inverse_hessian, linesearch3),
+                    init_param.values.into(),
+                )
+                .add_observer(SlogLogger::term(), ObserverMode::Every(1))
+                .max_iters(map_max_iterations)
                 .run()
-                .unwrap()
-        }
+                .unwrap(),
 
-        3 => Executor::new(
-            cost,
-            BFGS::new(init_inverse_hessian, linesearch3),
-            init_param.values.into(),
-        )
-        .add_observer(SlogLogger::term(), ObserverMode::Every(1))
-        .max_iters(map_max_iterations)
-        .run()
-        .unwrap(),
-
-        4 => Executor::new(
-            cost,
-            SteepestDescent::new(linesearch3),
-            init_param.values.into(),
-        )
-        .add_observer(SlogLogger::term(), ObserverMode::Every(100))
-        .max_iters(map_max_iterations)
-        .run()
-        .unwrap(),
-*/
+                4 => Executor::new(
+                    cost,
+                    SteepestDescent::new(linesearch3),
+                    init_param.values.into(),
+                )
+                .add_observer(SlogLogger::term(), ObserverMode::Every(100))
+                .max_iters(map_max_iterations)
+                .run()
+                .unwrap(),
+        */
         _ => unimplemented!(),
     };
 
@@ -631,17 +621,17 @@ pub fn fit_inverse_model(
 
     // 3. Generate initial guess around the MAP point
 
-    
     let nwalkers = 6 * ndims; // TODO, add to inv_opts
     let walkers = (0..nwalkers).map(|seed| {
         let mut rng = Pcg64::seed_from_u64(seed as u64);
 
-        let p = v.iter().map(|p_i| {p_i + rng.gen_range(-1e-6..=1.0e-6)}).collect();
+        let p = v
+            .iter()
+            .map(|p_i| p_i + rng.gen_range(-1e-6..=1.0e-6))
+            .collect();
 
         (p, rng)
     });
-
-
 
     // 4. Run the emcee sampler
     let ndim = v.len();
@@ -651,8 +641,7 @@ pub fn fit_inverse_model(
     //let mut sampler =
     //    emcee::EnsembleSampler::new(nwalkers, ndim, &inverse_model).expect("creating sampler");
 
-    let (chain, accepted) = sample(&inverse_model, walkers, niterations*2, &Serial);
-
+    let (chain, accepted) = sample(&inverse_model, walkers, niterations * 2, &Serial);
 
     // half of the iterations are burn-in
     let chain = &chain[niterations * nwalkers..];
@@ -662,10 +651,7 @@ pub fn fit_inverse_model(
     let acceptance_fraction = accepted as f64 / niterations as f64;
 
     // 5. Wrangle the output and compute statistics
-    println!(
-        "Complete.  Acceptance fraction: {:?}",
-        acceptance_fraction
-    );
+    println!("Complete.  Acceptance fraction: {:?}", acceptance_fraction);
 
     Ok(())
 }
@@ -821,3 +807,6 @@ mod tests {
         assert_eq!(log2_usize(2_usize.pow(12)), 12_usize);
     }
 }
+
+
+*/

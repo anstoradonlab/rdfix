@@ -1,8 +1,10 @@
 use rdfix::forward::DetectorParamsBuilder;
 
+/* MAKEITWORK
 use rdfix::inverse::{
     fit_inverse_model, DetectorInverseModel, InversionOptions, InversionOptionsBuilder,
 };
+*/
 
 use rdfix::{InputRecord, InputTimeSeries};
 
@@ -10,12 +12,12 @@ use log::{debug, error, info, log_enabled, Level};
 
 fn main() {
     env_logger::init();
-    error!("this is printed by default");
+    error!("Here's an error message for tesing purposes");
 
-    let p = DetectorParamsBuilder::default().build().unwrap();
+    let p = DetectorParamsBuilder::<f64>::default().build().unwrap();
     println!("Hello, world!, here's the model: {:#?}", p);
 
-    let p = DetectorParamsBuilder::default().build().unwrap();
+    let p = DetectorParamsBuilder::<f64>::default().build().unwrap();
     let trec = InputRecord {
         time: 0.0,
         /// LLD minus ULD (ULD are noise), missing values marked with NaN
@@ -32,6 +34,10 @@ fn main() {
     }
     ts.counts[20] *= 2.0;
     ts.counts[21] *= 2.0;
+
+    /*MAKEITWORK
     let inv_opts = InversionOptionsBuilder::default().build().unwrap();
     fit_inverse_model(p, inv_opts, ts).unwrap();
+
+    */
 }

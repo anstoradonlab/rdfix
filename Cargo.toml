@@ -33,6 +33,7 @@ cobyla = "0.3.2"
 hammer-and-sample = "0.1"
 rand = "0.8.5"
 rand_pcg = "0.3.1"
+arrayvec = "0.7.2"
 
 #[dev-dependencies]
 #assert_approx_eq = "1.1"
