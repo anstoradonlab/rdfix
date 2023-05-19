@@ -1,4 +1,5 @@
 use rdfix::forward::DetectorParamsBuilder;
+use autodiff::FT;
 
 /* MAKEITWORK
 use rdfix::inverse::{
@@ -15,9 +16,10 @@ fn main() {
     error!("Here's an error message for tesing purposes");
 
     let p = DetectorParamsBuilder::<f64>::default().build().unwrap();
-    println!("Hello, world!, here's the model: {:#?}", p);
+    println!("parameters, f64: {:#?}", p);
 
-    let p = DetectorParamsBuilder::<f64>::default().build().unwrap();
+    let p_diff = DetectorParamsBuilder::<FT<f64>>::default().build().unwrap();
+    println!("parameters, differentiable: {:#?}", p_diff);
     let trec = InputRecord {
         time: 0.0,
         /// LLD minus ULD (ULD are noise), missing values marked with NaN

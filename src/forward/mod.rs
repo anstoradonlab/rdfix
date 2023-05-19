@@ -32,8 +32,6 @@ let idx = x.to_usize().unwrap();
 
 use derive_builder::Builder;
 //use ode_solvers::dop853::*;
-use ode_solvers::dopri5::*;
-use ode_solvers::rk4::Rk4;
 use ode_solvers::*;
 pub mod constants;
 pub mod quickplot;
@@ -43,8 +41,7 @@ use self::stepper::integrate;
 use super::{InputRecord, InputRecordVec, InputTimeSeries};
 use anyhow::Result;
 use constants::*;
-use num;
-use num_traits::Float;
+use num::Float;
 use rdfix_gf::generated_functions as gf;
 
 pub enum Parameter {
@@ -91,6 +88,28 @@ where
     pub plateout_time_constant: P,
 }
 
+impl<P> DetectorParams<P>
+where P: Float+std::fmt::Debug,
+{
+    pub fn into_inner_type<NP>(&self)->DetectorParams<NP>
+    where NP: Float+std::fmt::Debug,
+    {
+        DetectorParams{
+            exflow_scale: NP::from(self.exflow_scale).unwrap(),
+            inflow: NP::from(self.inflow).unwrap(),
+            volume: NP::from(self.volume).unwrap(),
+            sensitivity: NP::from(self.sensitivity).unwrap(),
+            r_screen: NP::from(self.r_screen).unwrap(),
+            r_screen_scale: NP::from(self.r_screen_scale).unwrap(),
+            delay_time: NP::from(self.delay_time).unwrap(),
+            volume_delay_1: NP::from(self.volume_delay_1).unwrap(),
+            volume_delay_2: NP::from(self.volume_delay_2).unwrap(),
+            plateout_time_constant: NP::from(self.plateout_time_constant).unwrap(),
+
+        }
+    }
+}
+
 impl<P> DetectorParamsBuilder<P>
 where
     P: Float + std::fmt::Debug,
@@ -134,28 +153,41 @@ where
 }
 
 /// interpolation utility functions
-fn linear_interpolation<P>(ti: P, y: &[P], tmax: P) -> P
+fn linear_interpolation<P,T>(ti: P, y: &[T], tmax: P) -> P
 where
     P: Float + std::fmt::Debug,
+    T: Float + std::fmt::Debug,
 {
-    assert!(ti <= P::from(tmax).unwrap());
-    assert!(ti >= P::from(0.0).unwrap());
-    let time_step = tmax / P::from(y.len() - 1).unwrap();
-    let p = ti / P::from(time_step).unwrap();
-    let idx0 = p.floor().to_usize().unwrap();
-    let idx1 = p.ceil().to_usize().unwrap();
-    let w1 = p - P::from(idx0).unwrap();
-    let w0 = P::from(1.0).unwrap() - w1;
-    P::from(y[idx0]).unwrap() * w0 + P::from(y[idx1]).unwrap() * w1
+    let yi = {
+        if ti <= P::zero(){
+            P::from(y[0]).unwrap()
+        }
+        else if ti >= P::from(tmax).unwrap(){
+            P::from(y[y.len()-1]).unwrap()
+        }
+        else{
+            assert!(ti <= P::from(tmax).unwrap());
+            assert!(ti >= P::from(0.0).unwrap());
+            let time_step = tmax / P::from(y.len() - 1).unwrap();
+            let p = ti / P::from(time_step).unwrap();
+            let idx0 = p.floor().to_usize().unwrap();
+            let idx1 = p.ceil().to_usize().unwrap();
+            let w1 = p - P::from(idx0).unwrap();
+            let w0 = P::from(1.0).unwrap() - w1;
+            P::from(y[idx0]).unwrap() * w0 + P::from(y[idx1]).unwrap() * w1
+        }
+    };
+    yi
 }
 
-fn stepwise_interpolation<P>(ti: P, y: &[P], tmax: P) -> P
+fn stepwise_interpolation<P,T>(ti: P, y: &[T], tmax: P) -> P
 where
     P: Float + std::fmt::Debug,
+    T: Float + std::fmt::Debug,
 {
     let time_step = tmax / P::from(y.len() - 1).unwrap();
     let p = ti / P::from(time_step).unwrap();
-    let idx1 = p.ceil().to_usize().unwrap();
+    let idx1 = if ti <= P::zero() {0} else {p.ceil().to_usize().unwrap()};
     P::from(y[idx1]).unwrap()
 }
 
@@ -199,12 +231,16 @@ where
             ti = tmax
         };
 
-        // Just set the gradient equal to the y value itself (attempt to get this to compile)
-        for ii in 0..dy.len(){
-            dy[ii] = y[ii];
-        }
+        //// Just set the gradient equal to the y value itself (attempt to get this to compile)
+        //for ii in 0..dy.len(){
+        //    dy[ii] = y[ii];
+        //}
 
-        /************************
+        let p_lamrn = P::from(LAMRN).unwrap();
+        let p_lama = P::from(LAMA).unwrap();
+        let p_lamb = P::from(LAMB).unwrap();
+        let p_lamc = P::from(LAMC).unwrap();
+
         // interpolate inputs to current point in time
         let _airt_l = linear_interpolation(ti, &self.data.airt, tmax);
         let _airt_s = stepwise_interpolation(ti, &self.data.airt, tmax);
@@ -219,12 +255,12 @@ where
         let background_count_rate =
             linear_interpolation(ti, &self.data.background_count_rate, tmax);
         // scale factors (used in inversion)
-        assert!(self.p.exflow_scale >= 0.0);
-        assert!(self.p.r_screen_scale >= 0.0);
+        assert!(self.p.exflow_scale >= P::zero());
+        assert!(self.p.r_screen_scale >= P::zero());
         let q_external = q_external * self.p.exflow_scale;
         let r_screen = self.p.r_screen * self.p.r_screen_scale;
         // ambient (or external) radon concentration in atoms per m3
-        let n_rn_ext = radon / LAMRN;
+        let n_rn_ext = radon / p_lamrn;
         // limit the number of free parameters by calculating some from the others
         let (eff, recoil_prob) = calc_eff_and_recoil_prob(
             q_internal,
@@ -246,59 +282,59 @@ where
         let fc = y[IDX_FC];
         // The radon concentration flowing into the inlet needs to be
         // bumped up if the injection source is active
-        let inj_is_active = self.inj_source_strength > 0.0
-            && (t - t_delay) > self.inj_begin
-            && (t - t_delay) <= self.inj_begin + self.inj_duration;
+        let inj_is_active = self.inj_source_strength > P::zero()
+            && (ti) > self.inj_begin
+            && (ti) <= self.inj_begin + self.inj_duration;
         let n_rn_inj = if inj_is_active {
             self.inj_source_strength / q_external
         } else {
-            0.0
+            P::zero()
         };
         // The radon concentration flowing into the main tank needs to be
         // bumped up if the calibration source is active
-        let cal_is_active = self.cal_source_strength > 0.0
-            && (t - t_delay) > self.cal_begin
-            && (t - t_delay) <= self.cal_begin + self.cal_duration;
+        let cal_is_active = self.cal_source_strength > P::zero()
+            && (ti) > self.cal_begin
+            && (ti) <= self.cal_begin + self.cal_duration;
         let n_rn_cal = if cal_is_active {
             self.cal_source_strength / q_external
         } else {
-            0.0
+            P::zero()
         };
         // make sure that we can't have V_delay_2 > 0 when V_delay == 0
-        let v_delay_1: f64;
-        let v_delay_2: f64;
-        if self.p.volume_delay_1 == 0.0 && self.p.volume_delay_2 > 0.0 {
+        let v_delay_1: P;
+        let v_delay_2: P;
+        if self.p.volume_delay_1 == P::zero() && self.p.volume_delay_2 > P::zero() {
             v_delay_1 = self.p.volume_delay_2;
-            v_delay_2 = 0.0;
+            v_delay_2 = P::zero();
         } else {
             v_delay_1 = self.p.volume_delay_1;
             v_delay_2 = self.p.volume_delay_2;
         }
         // effect of delay and tank volumes (allow V_delay to be zero)
-        let d_nrn_dt: f64;
-        let d_nrnd1_dt: f64;
-        let d_nrnd2_dt: f64;
-        if v_delay_1 == 0.0 {
+        let d_nrn_dt: P;
+        let d_nrnd1_dt: P;
+        let d_nrnd2_dt: P;
+        if v_delay_1 == P::zero() {
             // no delay tanks
             d_nrn_dt =
-                q_external / self.p.volume * (n_rn_ext + n_rn_cal + n_rn_inj - n_rn) - n_rn * LAMRN;
+                q_external / self.p.volume * (n_rn_ext + n_rn_cal + n_rn_inj - n_rn) - n_rn * p_lamrn;
             // Nrnd,Nrnd2 become unimportant, but we need to do something with them
             // so just apply the same equation as for Nrn
             d_nrnd1_dt = q_external / self.p.volume * (n_rn_ext + n_rn_cal + n_rn_inj - n_rn)
-                - n_rn_d1 * LAMRN;
+                - n_rn_d1 * p_lamrn;
             d_nrnd2_dt = q_external / self.p.volume * (n_rn_ext + n_rn_cal + n_rn_inj - n_rn)
-                - n_rn_d2 * LAMRN;
-        } else if v_delay_1 > 0.0 && v_delay_2 == 0.0 {
+                - n_rn_d2 * p_lamrn;
+        } else if v_delay_1 > P::zero() && v_delay_2 == P::zero() {
             //one delay tank
-            d_nrn_dt = q_external / self.p.volume * (n_rn_d1 + n_rn_cal - n_rn) - n_rn * LAMRN;
-            d_nrnd1_dt = q_external / v_delay_1 * (n_rn_ext + n_rn_inj - n_rn_d1) - n_rn_d1 * LAMRN;
+            d_nrn_dt = q_external / self.p.volume * (n_rn_d1 + n_rn_cal - n_rn) - n_rn * p_lamrn;
+            d_nrnd1_dt = q_external / v_delay_1 * (n_rn_ext + n_rn_inj - n_rn_d1) - n_rn_d1 * p_lamrn;
             //unused, but apply same eqn as delay tank 1
-            d_nrnd2_dt = q_external / v_delay_1 * (n_rn_ext + n_rn_inj - n_rn_d1) - n_rn_d2 * LAMRN;
+            d_nrnd2_dt = q_external / v_delay_1 * (n_rn_ext + n_rn_inj - n_rn_d1) - n_rn_d2 * p_lamrn;
         } else {
             //two delay tanks
-            d_nrn_dt = q_external / self.p.volume * (n_rn_d1 + n_rn_cal - n_rn) - n_rn * LAMRN;
-            d_nrnd1_dt = q_external / v_delay_1 * (n_rn_ext + n_rn_inj - n_rn_d1) - n_rn_d1 * LAMRN;
-            d_nrnd2_dt = q_external / v_delay_2 * (n_rn_d1 - n_rn_d2) - n_rn_d2 * LAMRN;
+            d_nrn_dt = q_external / self.p.volume * (n_rn_d1 + n_rn_cal - n_rn) - n_rn * p_lamrn;
+            d_nrnd1_dt = q_external / v_delay_1 * (n_rn_ext + n_rn_inj - n_rn_d1) - n_rn_d1 * p_lamrn;
+            d_nrnd2_dt = q_external / v_delay_2 * (n_rn_d1 - n_rn_d2) - n_rn_d2 * p_lamrn;
         }
 
         // effect of temperature changes causing the tank to 'breathe'
@@ -308,13 +344,13 @@ where
         //let tt = self.p.volume / q_internal;
         let (n_a, n_b) =
             gf::calc_na_nb_factors(q_internal, self.p.volume, self.p.plateout_time_constant);
-        let n_c = 0.0;
+        let n_c = P::zero();
         // compute rate of change of each state variable
-        let d_fa_dt = q_internal * r_screen * n_a * n_rn * LAMRN - fa * LAMA;
-        let d_fb_dt = q_internal * r_screen * n_b * n_rn * LAMRN - fb * LAMB
-            + fa * LAMA * (1.0 - recoil_prob);
-        let d_fc_dt = q_internal * r_screen * n_c * n_rn * LAMRN - fc * LAMC + fb * LAMB; // TODO: why is there no recoil probability here?? i.e. * (1.0-recoil_prob);
-        let d_acc_counts_dt = eff * (fa * LAMA + fc * LAMC);
+        let d_fa_dt = q_internal * r_screen * n_a * n_rn * p_lamrn - fa * p_lama;
+        let d_fb_dt = q_internal * r_screen * n_b * n_rn * p_lamrn - fb * p_lamb
+            + fa * p_lama * (P::one() - recoil_prob);
+        let d_fc_dt = q_internal * r_screen * n_c * n_rn * p_lamrn - fc * p_lamc + fb * p_lamb; // TODO: why is there no recoil probability here?? i.e. * (1.0-recoil_prob);
+        let d_acc_counts_dt = eff * (fa * p_lama + fc * p_lamc);
         // pack into dy
         dy[IDX_NRND1] = d_nrnd1_dt;
         dy[IDX_NRND2] = d_nrnd2_dt;
@@ -324,7 +360,6 @@ where
         dy[IDX_FC] = d_fc_dt;
         dy[IDX_ACC_COUNTS] = d_acc_counts_dt + background_count_rate;
 
-        ************************************/
     }
 }
 
@@ -386,6 +421,28 @@ impl<P> DetectorForwardModel<P>
 where
     P: Float + std::fmt::Debug,
 {
+
+
+    pub fn into_inner_type<NP>(&self)->DetectorForwardModel<NP>
+    where NP: Float+std::fmt::Debug,
+    {
+        let radon = self.radon.iter().map(|x| NP::from(*x).unwrap()).collect();
+        DetectorForwardModel::<NP>{
+            p: self.p.into_inner_type::<NP>(),
+            data: self.data.clone(),
+            time_step: NP::from(self.time_step).unwrap(),
+            radon: radon,
+            inj_source_strength: NP::from(self.inj_source_strength).unwrap(),
+            inj_begin: NP::from(self.inj_begin).unwrap(),
+            inj_duration: NP::from(self.inj_duration).unwrap(),
+            cal_source_strength: NP::from(self.cal_source_strength).unwrap(),
+            cal_begin: NP::from(self.cal_begin).unwrap(),
+            cal_duration: NP::from(self.cal_duration).unwrap(),
+        }
+    }
+
+    
+
     pub fn initial_state(&self, radon0: P) -> [P; NUM_STATE_VARIABLES] {
         // this is required for a DVector
         // let mut y = State::from_element(NUM_STATE_VARIABLES, 0.0);
@@ -397,19 +454,19 @@ where
         // where lambda is the radioactive decay constant and tt = V/Q is the transit time
 
         // Generic versions of constants
-        let LAMRN_p = P::from(LAMRN).unwrap();
+        let lamrn_p = P::from(LAMRN).unwrap();
 
         // Initial state has everything in equilibrium with first radon value
         // radon, atoms/m3
-        let n_radon0 = radon0 / LAMRN_p;
+        let n_radon0 = radon0 / lamrn_p;
 
         let q_external = P::from(self.data.q_external[0]).unwrap() * self.p.exflow_scale;
         let r_screen = self.p.r_screen * self.p.r_screen_scale;
 
-        let n_rn_d1 = n_radon0 / (LAMRN_p * self.p.volume_delay_1 / q_external + P::one());
-        let n_rn_d2 = n_rn_d1 / (LAMRN_p * self.p.volume_delay_2 / q_external + P::one());
-        let n_rn = n_rn_d2 / (LAMRN_p * self.p.volume / q_external + P::one());
-        let rn = n_rn * LAMRN_p;
+        let n_rn_d1 = n_radon0 / (lamrn_p * self.p.volume_delay_1 / q_external + P::one());
+        let n_rn_d2 = n_rn_d1 / (lamrn_p * self.p.volume_delay_2 / q_external + P::one());
+        let n_rn = n_rn_d2 / (lamrn_p * self.p.volume / q_external + P::one());
+        let rn = n_rn * lamrn_p;
 
         let (_eff, recoil_prob) = calc_eff_and_recoil_prob(
             P::from(self.data.q_internal[0]).unwrap(),
@@ -586,11 +643,11 @@ mod tests {
         };
 
         let mut data = InputTimeSeries::new();
-        for ii in 0..300 {
+        for ii in 0..600 {
             data.push(trec);
             radon.push(if ii == 0 || ii > 60 { 0.0 } else { 1.0 });
         }
-        let time_step = 1.0 * 60.0;
+        let time_step = 1.0 * 60.0 * 30.0;
         for (ii, itm) in data.iter_mut().enumerate() {
             *itm.time = (ii as f64) * time_step;
         }
@@ -605,10 +662,5 @@ mod tests {
 
         draw_plot(&num_counts[..], "test.svg").unwrap();
 
-        for (x, y) in num_counts.iter().take(10).enumerate() {
-            //println!("{} {}", x,y);
-            //plot!(y where caption="response");
-            debug_plotter::plot!(y);
-        }
     }
 }

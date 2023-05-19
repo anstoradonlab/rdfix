@@ -10,17 +10,17 @@ derive_builder = "0.12"
 ode_solvers = "0.3"
 rdfix_gf = {path="../rdfix_gf"}
 statrs = "0.16"
-autodiff = "0.6"
+autodiff = "0.7"
 anyhow = "1.0"
 env_logger = "0.10"
 log = "0.4"
-ndarray = { version = "0.15.0", features = ["blas"] }
+ndarray = { version = "0.15.0", features = ["blas", "serde"] }
 blas-src = { version = "0.8", features = ["openblas"] }
 openblas-src = { version = "0.10", features = ["cblas", "system"] }
 num = "0.4"
 finitediff = {version="0.1.4", features = ["ndarray"]}
-soa_derive = "0.12"
-polars = {version="0.26", features=["dtype-datetime"]}
+soa_derive = "0.13"
+polars = {version="0.29", features=["dtype-datetime"]}
 debug_plotter = "0.2"
 plotters = "0.3"
 plotlib = "0.5"
@@ -29,11 +29,17 @@ assert_approx_eq = "1.1"
 indicatif = "0.17"
 num-traits = "0.2.15"
 argmin = {version="0.8.0", default-features=false, features=["slog-logger"]}
+# argmin-math = { version = "0.3", features = ["ndarray_latest-serde", "nalgebra_latest-serde"] }
+argmin-math = { version = "0.3", features = ["ndarray_latest-serde"] }
 cobyla = "0.3.2"
-hammer-and-sample = "0.1"
+hammer-and-sample = "0.2"
 rand = "0.8.5"
 rand_pcg = "0.3.1"
 arrayvec = "0.7.2"
+argmin_testfunctions = "0.1.1"
 
 #[dev-dependencies]
 #assert_approx_eq = "1.1"
+
+[profile.test]
+opt-level = 3

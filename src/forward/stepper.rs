@@ -1,7 +1,6 @@
 use super::{constants::NUM_STATE_VARIABLES, DetectorForwardModel};
 use itertools::izip;
 use num::Float;
-use arrayvec::ArrayVec;
 
 /// Advance `state` from `t0` to `t1` by taking `num_steps` RK4 steps
 pub fn integrate<P>(state: &mut[P; NUM_STATE_VARIABLES], model: &DetectorForwardModel<P>, t0: P, t1: P, num_steps: usize) 
@@ -13,8 +12,7 @@ where P: Float + std::fmt::Debug,
     let mut k4 = [P::zero(); NUM_STATE_VARIABLES];
     let mut ktmp = [P::zero(); NUM_STATE_VARIABLES];
 
-    let mut ynew: ArrayVec<P,NUM_STATE_VARIABLES> = ArrayVec::new();
-
+    
     let mut new_state = state.clone();
 
     // Step definition is
@@ -30,15 +28,10 @@ where P: Float + std::fmt::Debug,
     let sixth = P::from(1.0/6.0).unwrap();
     let h = (t1-t0)/P::from(num_steps).unwrap();
     let half_h = half*h;
-    let mut first = true;
     for _ in 0..num_steps {
 
         // k1
         model.rate_of_change(t, &new_state, &mut k1);
-        if first{
-            first = false;
-            dbg!(k1);
-        }
 
         // k2
         for (ktmp, yn, k1) in izip!(&mut ktmp, &new_state, &k1){
@@ -50,13 +43,13 @@ where P: Float + std::fmt::Debug,
         for (ktmp, yn, k2) in izip!(&mut ktmp, &new_state, &k2){
             *ktmp = *yn + half_h * *k2;
         }
-        model.rate_of_change(t + half_h, &ktmp, &mut k2);
+        model.rate_of_change(t + half_h, &ktmp, &mut k3);
 
         // k4
         for (ktmp, yn, k3) in izip!(&mut ktmp, &new_state, &k3){
             *ktmp = *yn + h * *k3;
         }
-        model.rate_of_change(t + h, &ktmp, &mut k2);
+        model.rate_of_change(t + h, &ktmp, &mut k4);
 
         // sum result
         for (state, k1, k2, k3, k4) in izip!(&mut new_state, &k1, &k2, &k3, &k4){
