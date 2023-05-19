@@ -538,6 +538,7 @@ mod tests {
 
     use super::*;
     use quickplot::draw_plot;
+    use assert_approx_eq::assert_approx_eq;
 
     fn get_timeseries(npts: usize) -> InputRecordVec {
         let trec = InputRecord {
@@ -626,6 +627,52 @@ mod tests {
         println!("Numerical solution, expected counts: {:#?}", nec);
     }
     */
+
+    /// If the ambient radon concentration is zero, the count rate
+    /// should be equal to the background count rate
+    #[test]
+    fn count_rate_equals_background_with_zero_radon(){
+
+        let trec = InputRecord {
+            time: 0.0,
+            /// LLD minus ULD (ULD are noise), missing values marked with NaN
+            counts: 0.0,
+            background_count_rate: 1.0, // 100.0/60.0/60.,
+            // sensitivity is chosen so that 1 Bq/m3 = 1000 counts / 30-min
+            sensitivity: 1000. / (3600.0 / 2.0),
+            q_internal: 0.1 / 60.0,           //volumetric, m3/sec
+            q_external: 80.0 / 60.0 / 1000.0, //volumetric, m3/sec
+            airt: 21.0,                       // degC
+        };
+        const N: usize = 10;
+        const DT: f64 = 30.0*60.0;
+        let mut data = InputTimeSeries::from_iter(vec![trec; N]);
+        let radon = vec![0.0; N];
+
+        for (ii, itm) in data.iter_mut().enumerate() {
+            *itm.time = (ii as f64) * DT;
+        }
+
+        let expected_counts_per_30min = trec.background_count_rate * DT;
+
+
+        let fwd = DetectorForwardModelBuilder::default()
+            .data(data)
+            .radon(radon)
+            .time_step(DT)
+            .build()
+            .unwrap();
+        let num_counts = fwd.numerical_expected_counts().unwrap();
+        dbg!(expected_counts_per_30min);
+        println!("{:#?}", num_counts);
+
+        for nc in num_counts{
+            assert_approx_eq!(nc, expected_counts_per_30min);
+        }
+
+
+
+    }
 
     #[test]
     fn can_integrate_using_builder() {

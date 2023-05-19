@@ -393,7 +393,7 @@ impl<P: Float+std::fmt::Debug> DetectorInverseModel<P> {
             + lognormal_ln_pdf(r_screen_scale_mu, r_screen_scale_sigma, r_screen_scale);
 
         // TODO: get exflow from data instead of from the parameters
-        let exflow_scale_mu = P::from(1.0.ln()).unwrap();
+        let exflow_scale_mu = P::one().ln();
         let exflow_sigma = P::from(self.inv_opts.exflow_sigma).unwrap();
         ln_prior = ln_prior
             + lognormal_ln_pdf(exflow_scale_mu, exflow_sigma, exflow_scale);
