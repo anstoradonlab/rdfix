@@ -637,12 +637,19 @@ pub fn fit_inverse_model(
 
     // 2. Optimisation (MAP)
 
-    let linesearch = MoreThuenteLineSearch::new().with_bounds(1e-6, 0.5)?;
-    let solver = SteepestDescent::new(linesearch);
+    let linesearch = MoreThuenteLineSearch::new().with_bounds(1e-6, 0.01)?;
+    //let solver = SteepestDescent::new(linesearch);
+    let solver: BFGS<MoreThuenteLineSearch<Array1<f64>, Array1<f64>, f64>, f64> = BFGS::new(linesearch).with_tolerance_cost(1e-4)?.with_tolerance_grad(1e-4)?;
+
+    let init_hessian: Array2<f64> = Array2::eye(init_param.len());
 
     // Run solver
     let res = Executor::new(inverse_model, solver)
-        .configure(|state| state.param(init_param).max_iters(1000))
+        .configure(|state| {
+            state.param(init_param)
+                 .max_iters(1000)
+                 .inv_hessian(init_hessian)
+        })
         .add_observer(SlogLogger::term(), ObserverMode::Always)
         .run()?;
 
@@ -854,7 +861,7 @@ mod tests {
         let p = DetectorParamsBuilder::default().build().unwrap();
         let inv_opts = InversionOptionsBuilder::default().build().unwrap();
         let npts = 4;
-        let mut ts = get_timeseries(npts);
+        let ts = get_timeseries(npts);
         fit_inverse_model(p, inv_opts, ts).expect("Failed to fit inverse model");
     }
 
@@ -865,7 +872,7 @@ mod tests {
         let inv_opts = InversionOptionsBuilder::default().build().unwrap();
         let npts = 4;
         let mut ts = get_timeseries(npts);
-        ts.counts[npts-1] += 50.0;
+        ts.counts[npts-1] += 500.0;
         fit_inverse_model(p, inv_opts, ts).expect("Failed to fit inverse model");
     }
 
