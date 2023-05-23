@@ -1,6 +1,6 @@
 mod generic_primitives;
 
-use self::generic_primitives::{lognormal_ln_pdf, poisson_ln_pmf};
+use self::generic_primitives::{lognormal_ln_pdf, poisson_ln_pmf, normal_ln_pdf};
 
 use super::forward::{
     DetectorForwardModel, DetectorForwardModelBuilder, DetectorParams, DetectorParamsBuilder,
@@ -339,6 +339,7 @@ impl<P: Float+std::fmt::Debug> DetectorInverseModel<P> {
     Generic lnprob function which can take differentable values and is therefore
     usable with the autdiff crate
     */
+    #[inline(always)]
     fn generic_lnprob(&self, theta: &[P]) -> P {
         // Note: invalid prior results are signaled by
         // returning -std::f64::INFINITY
@@ -387,6 +388,8 @@ impl<P: Float+std::fmt::Debug> DetectorInverseModel<P> {
 
         let mut ln_prior = P::zero();
 
+        // Lognormal priors
+        /*
         let r_screen_scale_mu = P::one().ln();
         let r_screen_scale_sigma = P::from(self.inv_opts.r_screen_sigma).unwrap();
         ln_prior = ln_prior
@@ -397,14 +400,26 @@ impl<P: Float+std::fmt::Debug> DetectorInverseModel<P> {
         let exflow_sigma = P::from(self.inv_opts.exflow_sigma).unwrap();
         ln_prior = ln_prior
             + lognormal_ln_pdf(exflow_scale_mu, exflow_sigma, exflow_scale);
+        */
 
-        // println!("{} {} {} {} || {} {}", r_screen_mu, r_screen_sigma, exflow_mu, exflow_sigma, r_screen, exflow);
+        // Normal priors
+        let r_screen_scale_mu = P::one();
+        let r_screen_scale_sigma = P::from(self.inv_opts.r_screen_sigma).unwrap();
+        ln_prior = ln_prior
+            + normal_ln_pdf(r_screen_scale_mu, r_screen_scale_sigma, r_screen_scale);
+
+        let exflow_scale_mu = P::one();
+        let exflow_sigma = P::from(self.inv_opts.exflow_sigma).unwrap();
+        ln_prior = ln_prior
+            + normal_ln_pdf(exflow_scale_mu, exflow_sigma, exflow_scale);
+
+        //println!("{:?} {:?} {:?} {:?} || {:?} {:?}", r_screen_scale_mu, r_screen_scale_sigma, exflow_scale_mu, exflow_sigma, r_screen_scale, exflow_scale);
 
         lp = lp + ln_prior;
 
         // Likelihood
         let mut fwd = self.fwd.clone();
-        fwd.radon = radon;
+        fwd.radon = radon.clone();
         fwd.p.r_screen_scale = r_screen_scale;
         fwd.p.exflow_scale = exflow_scale;
 
@@ -417,8 +432,13 @@ impl<P: Float+std::fmt::Debug> DetectorInverseModel<P> {
                 return -P::from(f64::INFINITY).unwrap();
             }
         };
+        
+        // Note: skip the first 'observed count' because of the timestamp convention
+        let observed_counts: Vec<_> = self.ts.iter().skip(1).map(|itm| itm.counts).collect();
+        
+        assert!(expected_counts.len() == observed_counts.len());
+        assert!(radon.len() == expected_counts.len() + 1);
 
-        let observed_counts: Vec<_> = self.ts.iter().map(|itm| itm.counts).collect();
 
         // The right apprach here depends on the context.  For emcee sampling, the best thing
         // to do is to return -inf, but for optimisation it might be better just to run
@@ -426,6 +446,7 @@ impl<P: Float+std::fmt::Debug> DetectorInverseModel<P> {
         let MIN_VALID = P::from(1e-6).unwrap();
 
         for (cex, cobs) in expected_counts.iter().zip(observed_counts) {
+            
             //let poisson_arg: f64 =  if *cex < 1e-6{
             //    println!("Expected counts out of range: {}", *cex);
             //    1e-6
@@ -438,8 +459,10 @@ impl<P: Float+std::fmt::Debug> DetectorInverseModel<P> {
             }
             let lp_inc = poisson_ln_pmf(*cex, P::from(*cobs).unwrap());
             lp = lp + lp_inc;
-            // println!("{} {} {} {}", *cex, *cobs, lp_inc, lp_max);
+            // println!(" *** expected (from model) = {:?} observed = {:?} lp_increment = {:?} {:?}", *cex, *cobs, lp_inc, radon);
+
         }
+        assert!(lp.is_finite());
         lp
     }
 
@@ -619,7 +642,7 @@ pub fn fit_inverse_model(
 
     // Run solver
     let res = Executor::new(inverse_model, solver)
-        .configure(|state| state.param(init_param).max_iters(10))
+        .configure(|state| state.param(init_param).max_iters(1000))
         .add_observer(SlogLogger::term(), ObserverMode::Always)
         .run()?;
 
@@ -721,15 +744,19 @@ mod tests {
     fn can_compute_lnprob() {
         let p = DetectorParamsBuilder::default().sensitivity(1000. / (3600.0 / 2.0)).build().unwrap();
         let inv_opts = InversionOptionsBuilder::default().build().unwrap();
-        let ts = get_timeseries(16);
+        let ts = get_timeseries(5);
         let time_step = 60.0 * 30.0; //TODO
                                      // Define initial parameter vector and cost function
         let initial_radon = calc_radon_without_deconvolution(&ts, time_step);
         let mut too_high_radon = initial_radon.clone();
         let rnavg = initial_radon.iter().sum::<f64>() / (initial_radon.len() as f64);
-        for itm in too_high_radon.iter_mut() {
-            *itm = rnavg * 100.0;
-        }
+        //for itm in too_high_radon.iter_mut().skip(1) {
+        //    *itm = rnavg * 100.0;
+        //}
+
+        too_high_radon[2] = 1.10;
+
+        dbg!(&too_high_radon);
         println!("Detector parameters: {:?}", p);
         println!("Inversion options: {:?}", inv_opts);
 
@@ -771,13 +798,64 @@ mod tests {
         // println!("const radon guess: {:#?}", worse_guess.values);
         let worse_pvec = ndarray::Array1::from_vec(worse_guess.clone());
         println!(
-            "const radon cost function evaluation: {}",
+            "Bad guess cost function evaluation: {}",
             cost.generic_lnprob(&worse_guess)
         );
         println!(
-            "Const radon cost function gradient: {:?}",
-            cost_diff.gradient(&worse_pvec).unwrap()
+            "Bad guess cost function gradient: {:?}\n       pvec: {:?}",
+            cost_diff.gradient(&worse_pvec).unwrap(),
+            &worse_pvec
         );
+    }
+
+    #[test]
+    fn gradient_is_sensitive_to_ambient_radon() {
+        let p = DetectorParamsBuilder::default().sensitivity(1000. / (3600.0 / 2.0)).build().unwrap();
+        let inv_opts = InversionOptionsBuilder::default().build().unwrap();
+        let ts = get_timeseries(2);
+        let time_step = 60.0 * 30.0; //TODO
+                                     // Define initial parameter vector and cost function
+        let mut initial_radon = calc_radon_without_deconvolution(&ts, time_step);
+        // set this value to something higher so that gradients will be non-zero
+        initial_radon[1] = 10.0;
+        println!("Initial radon concentration: {:?}", initial_radon);
+        let init_param = pack_state_vector(&initial_radon, p.clone(), ts.clone(), inv_opts);
+
+        let fwd = DetectorForwardModelBuilder::default()
+            .data(ts.clone())
+            .time_step(time_step)
+            .radon(initial_radon)
+            .build()
+            .expect("Failed to build detector model");
+
+        let cost_diff = DetectorInverseModel{
+            p: p.into_inner_type::<FT<f64>>(),
+            inv_opts: inv_opts,
+            ts: ts,
+            fwd: fwd.into_inner_type::<FT<f64>>(),
+        };
+
+        // println!("initial guess: {:#?}", init_param.values);
+        let pvec = ndarray::Array1::from_vec(init_param.clone());
+        let gradient = cost_diff.gradient(&pvec).unwrap();
+        println!(
+            "Initial guess cost function gradient: {:?}",
+            &gradient
+        );
+
+        assert!((gradient[3] - 0.0).abs() > 1e-5);
+
+    }
+
+
+    #[test]
+    fn can_run_inverse_problem_constant() {
+        // TODO: set options for very small number of iterations
+        let p = DetectorParamsBuilder::default().build().unwrap();
+        let inv_opts = InversionOptionsBuilder::default().build().unwrap();
+        let npts = 4;
+        let mut ts = get_timeseries(npts);
+        fit_inverse_model(p, inv_opts, ts).expect("Failed to fit inverse model");
     }
 
     #[test]
@@ -785,7 +863,9 @@ mod tests {
         // TODO: set options for very small number of iterations
         let p = DetectorParamsBuilder::default().build().unwrap();
         let inv_opts = InversionOptionsBuilder::default().build().unwrap();
-        let ts = get_timeseries(64);
+        let npts = 4;
+        let mut ts = get_timeseries(npts);
+        ts.counts[npts-1] += 50.0;
         fit_inverse_model(p, inv_opts, ts).expect("Failed to fit inverse model");
     }
 

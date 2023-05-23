@@ -36,6 +36,7 @@ const ACC: f64 = 10e-11;
 /// "An Analysis of the Lanczos Gamma Approximation",
 /// Glendon Ralph Pugh, 2004 p. 116
 #[allow(non_snake_case)]
+#[inline(always)]
 pub fn ln_gamma<P:Float>(x: P) -> P {
     // Auxiliary variable when evaluating the `gamma_ln` function
     let GAMMA_R = P::from(10.900511).unwrap();
@@ -80,7 +81,7 @@ pub fn ln_gamma<P:Float>(x: P) -> P {
     }
 }
 
-
+#[inline(always)]
 pub fn ln_factorial<P: Float>(x: P) -> P {
     ln_gamma(x + P::one())
 }
@@ -89,9 +90,10 @@ pub fn ln_factorial<P: Float>(x: P) -> P {
 /*
 Generic version of lognormal
 */
+#[inline(always)]
 pub fn lognormal_ln_pdf<P: Float>(location: P, scale:P, x: P) -> P {
 
-    /// Constant value for `ln(sqrt(2 * pi))`
+    // Constant value for `ln(sqrt(2 * pi))`
     const LN_SQRT_2PI: f64 = 0.91893853320467274178032973640561763986139747363778;
 
     if x <= P::zero() || x.is_infinite() {
@@ -103,8 +105,23 @@ pub fn lognormal_ln_pdf<P: Float>(location: P, scale:P, x: P) -> P {
 }
 
 /*
+Generic version of normal
+*/
+#[inline(always)]
+pub fn normal_ln_pdf<P: Float>(location: P, scale:P, x: P) -> P {
+    // Constant value for `ln(sqrt(2 * pi))`
+    const LN_SQRT_2PI: f64 = 0.91893853320467274178032973640561763986139747363778;
+
+    let d = (x - location) / scale;
+    (-P::from(0.5).unwrap() * d * d) - P::from(LN_SQRT_2PI).unwrap() - scale.ln()
+
+}
+
+
+/*
 Generic version of Poisson
 */
+#[inline(always)]
 pub fn poisson_ln_pmf<P: Float>(lambda:P, x:P) -> P{
     - lambda + x * lambda.ln() - ln_factorial(x)
 
@@ -130,6 +147,19 @@ mod tests {
                     .ln_pdf(x));
     
     }
+
+    #[test]
+    fn generic_normal(){
+        let location=1.0;
+        let scale=0.5;
+        let x = 1.2;
+        assert_eq!( normal_ln_pdf(location, scale, x),
+                    Normal::new(location, scale)
+                    .unwrap()
+                    .ln_pdf(x));
+    
+    }
+
 
     #[test]
     fn generic_poisson(){

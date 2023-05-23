@@ -41,7 +41,7 @@ use self::stepper::integrate;
 use super::{InputRecord, InputRecordVec, InputTimeSeries};
 use anyhow::Result;
 use constants::*;
-use num::Float;
+use num::{Float, ToPrimitive};
 use rdfix_gf::generated_functions as gf;
 
 pub enum Parameter {
@@ -71,7 +71,7 @@ where
     /// Screen mesh capture probability (rs) (default of 0.95)
     #[builder(default = "P::from(0.95).unwrap()")]
     pub r_screen: P,
-    /// Scale factor for r_screen (default of 0.0)
+    /// Scale factor for r_screen (default of 1.0)
     #[builder(default = "P::from(1.0).unwrap()")]
     pub r_screen_scale: P,
     /// Overall delay time (lag) of detector (default 0.0 s)
@@ -153,37 +153,35 @@ where
 }
 
 /// interpolation utility functions
-fn linear_interpolation<P,T>(ti: P, y: &[T], tmax: P) -> P
+fn linear_interpolation<P>(ti: P, y: &[P], tmax: P) -> P
 where
     P: Float + std::fmt::Debug,
-    T: Float + std::fmt::Debug,
 {
     let yi = {
         if ti <= P::zero(){
-            P::from(y[0]).unwrap()
+            y[0]
         }
         else if ti >= P::from(tmax).unwrap(){
-            P::from(y[y.len()-1]).unwrap()
+            y[y.len()-1]
         }
         else{
             assert!(ti <= P::from(tmax).unwrap());
             assert!(ti >= P::from(0.0).unwrap());
             let time_step = tmax / P::from(y.len() - 1).unwrap();
-            let p = ti / P::from(time_step).unwrap();
+            let p = ti / time_step;
             let idx0 = p.floor().to_usize().unwrap();
             let idx1 = p.ceil().to_usize().unwrap();
             let w1 = p - P::from(idx0).unwrap();
             let w0 = P::from(1.0).unwrap() - w1;
-            P::from(y[idx0]).unwrap() * w0 + P::from(y[idx1]).unwrap() * w1
+            y[idx0] * w0 + y[idx1] * w1
         }
     };
     yi
 }
 
-fn stepwise_interpolation<P,T>(ti: P, y: &[T], tmax: P) -> P
+fn stepwise_interpolation<P>(ti: P, y: &[P], tmax: P) -> P
 where
     P: Float + std::fmt::Debug,
-    T: Float + std::fmt::Debug,
 {
     let time_step = tmax / P::from(y.len() - 1).unwrap();
     let p = ti / P::from(time_step).unwrap();
@@ -211,6 +209,14 @@ impl<P: Float + std::fmt::Debug> DetectorForwardModel<P> {
     ) {
         self.system(t.to_f64().unwrap(), y, dy)
     }
+}
+
+fn vec_as<T,P>(v: &[T]) -> Vec<P>
+where 
+    P: Float,
+    T: ToPrimitive + Copy,
+{
+    v.iter().map( |x| P::from(*x).unwrap()).collect()
 }
 
 impl<P> ode_solvers::System<[P; NUM_STATE_VARIABLES]> for DetectorForwardModel<P>
@@ -242,18 +248,24 @@ where
         let p_lamc = P::from(LAMC).unwrap();
 
         // interpolate inputs to current point in time
-        let _airt_l = linear_interpolation(ti, &self.data.airt, tmax);
-        let _airt_s = stepwise_interpolation(ti, &self.data.airt, tmax);
+        let airt_points = vec_as::<_,P>(&self.data.airt);
+        let _airt_l = linear_interpolation(ti, &airt_points, tmax);
+        let _airt_s = stepwise_interpolation(ti, &airt_points, tmax);
 
         // TODO: make radon switchable between linear and stepwise
         let radon = linear_interpolation(ti, &self.radon, tmax);
+        
         // Extract interpolated values from linear or stepwise,
         // depending on the variable
-        let q_external = stepwise_interpolation(ti, &self.data.q_external, tmax);
-        let q_internal = stepwise_interpolation(ti, &self.data.q_internal, tmax);
-        let sensitivity = linear_interpolation(ti, &self.data.sensitivity, tmax);
+        let q_external_points = vec_as::<_,P>(&self.data.q_external);
+        let q_internal_points = vec_as::<_,P>(&self.data.q_internal);
+        let sensitivity_points = vec_as::<_,P>(&self.data.sensitivity);
+        let background_count_rate_points = vec_as::<_,P>(&self.data.background_count_rate);
+        let q_external = stepwise_interpolation(ti, &q_external_points, tmax);
+        let q_internal = stepwise_interpolation(ti, &q_internal_points, tmax);
+        let sensitivity = linear_interpolation(ti, &sensitivity_points, tmax);
         let background_count_rate =
-            linear_interpolation(ti, &self.data.background_count_rate, tmax);
+            linear_interpolation(ti, &background_count_rate_points, tmax);
         // scale factors (used in inversion)
         assert!(self.p.exflow_scale >= P::zero());
         assert!(self.p.r_screen_scale >= P::zero());
@@ -441,8 +453,11 @@ where
         }
     }
 
-    
-
+    /// Calculate the initial state, in state vector form
+    ///
+    /// # Arguments
+    ///
+    /// * `radon0` - Radon concentration at t=0 in units of Bq/m3
     pub fn initial_state(&self, radon0: P) -> [P; NUM_STATE_VARIABLES] {
         // this is required for a DVector
         // let mut y = State::from_element(NUM_STATE_VARIABLES, 0.0);
@@ -673,6 +688,51 @@ mod tests {
 
 
     }
+
+    /// If the ambient radon concentration is constant, the count rate
+    /// should be constant and easy to calculate from the senstivity
+    #[test]
+    fn count_rate_at_constant_radon(){
+
+        let trec = InputRecord {
+            time: 0.0,
+            /// LLD minus ULD (ULD are noise), missing values marked with NaN
+            counts: 0.0,
+            background_count_rate: 1.0, // 100.0/60.0/60.,
+            // sensitivity is chosen so that 1 Bq/m3 = 1000 counts / 30-min
+            sensitivity: 1000. / (3600.0 / 2.0),
+            q_internal: 0.1 / 60.0,           //volumetric, m3/sec
+            q_external: 80.0 / 60.0 / 1000.0, //volumetric, m3/sec
+            airt: 21.0,                       // degC
+        };
+        const N: usize = 4;
+        const DT: f64 = 30.0*60.0;
+        let mut data = InputTimeSeries::from_iter(vec![trec; N]);
+        let radon = vec![1.0; N];
+
+        for (ii, itm) in data.iter_mut().enumerate() {
+            *itm.time = (ii as f64) * DT;
+        }
+
+        let expected_counts_per_30min = trec.background_count_rate * DT + 1000.0;
+
+
+        let fwd = DetectorForwardModelBuilder::default()
+            .data(data)
+            .radon(radon)
+            .time_step(DT)
+            .build()
+            .unwrap();
+        let num_counts = fwd.numerical_expected_counts().unwrap();
+        dbg!(expected_counts_per_30min);
+        println!("{:#?}", num_counts);
+
+        for nc in num_counts{
+            assert_approx_eq!(nc, expected_counts_per_30min);
+        }
+
+    }
+
 
     #[test]
     fn can_integrate_using_builder() {
