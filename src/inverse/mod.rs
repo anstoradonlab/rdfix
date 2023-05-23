@@ -639,7 +639,7 @@ pub fn fit_inverse_model(
 
     let linesearch = MoreThuenteLineSearch::new().with_bounds(1e-6, 0.01)?;
     //let solver = SteepestDescent::new(linesearch);
-    let solver: BFGS<MoreThuenteLineSearch<Array1<f64>, Array1<f64>, f64>, f64> = BFGS::new(linesearch).with_tolerance_cost(1e-4)?.with_tolerance_grad(1e-4)?;
+    let solver = BFGS::new(linesearch).with_tolerance_cost(1e-4)?.with_tolerance_grad(1e-4)?;
 
     let init_hessian: Array2<f64> = Array2::eye(init_param.len());
 
@@ -655,19 +655,21 @@ pub fn fit_inverse_model(
 
 
     println!("MAP optimisation complete: {}", res);
-    let map = res.state.get_best_param();
+    let map = res.state.get_best_param().unwrap();
 
     println!("Best params: {:?}", map);
 
-    /*
-    let v: Vec<f64> = map.into_raw_vec().iter().collect();
+    let map_vec = map.clone().into_raw_vec();
+    let v = map_vec.as_slice();
     let (_, _, transformed_map_radon) = unpack_state_vector(&v, &inv_opts);
     let mut map_radon = &mut transformed_map_radon.to_owned();
-    inverse_transform_radon_concs(&mut map_radon).unwrap();
+
+    // inverse_transform_radon_concs(&mut map_radon).unwrap();
 
     println!("Initial radon concentration: {:?}", initial_radon);
     println!("MAP radon concentration:     {:?}", map_radon);
 
+    /*
     // 3. Generate initial guess around the MAP point
 
     let nwalkers = 6 * ndims; // TODO, add to inv_opts
