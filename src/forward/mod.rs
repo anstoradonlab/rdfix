@@ -201,6 +201,7 @@ instead of defining State, use [P; NUM_STATE_VARIABLES]
 */
 
 impl<P: Float + std::fmt::Debug> DetectorForwardModel<P> {
+    #[inline(always)]
     fn rate_of_change(
         &self,
         t: P,
@@ -223,6 +224,7 @@ impl<P> ode_solvers::System<[P; NUM_STATE_VARIABLES]> for DetectorForwardModel<P
 where
     P: Float + std::fmt::Debug,
 {
+    #[inline(always)]
     fn system(&self, t: f64, y: &[P; NUM_STATE_VARIABLES], dy: &mut [P; NUM_STATE_VARIABLES]) {
         // TODO: enforce this earlier
         assert!(self.radon.len() == self.data.len());
@@ -511,6 +513,7 @@ where
         y
     }
 
+    #[inline(always)]
     pub fn numerical_solution(&self) -> Result<Vec<[P; NUM_STATE_VARIABLES]>> {
         //let system = (*self).clone()
         let system = self;
@@ -521,7 +524,7 @@ where
         let mut state = system.initial_state(system.radon[0]);
 
         // number of small RK4 steps to take per dt
-        let num_steps = 600_usize;
+        let num_steps = 30_usize;
         let mut t = t0;
         let mut expected_counts = Vec::with_capacity(num_steps);
         let mut y_out = Vec::with_capacity(num_steps);
@@ -537,6 +540,7 @@ where
         Ok(y_out)
     }
 
+    #[inline(always)]
     pub fn numerical_expected_counts(self) -> Result<Vec<P>> {
         let y_out = self.numerical_solution()?;
         let expected_counts = y_out.iter().map(|itm| itm[IDX_ACC_COUNTS]).collect();

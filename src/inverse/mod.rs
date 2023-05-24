@@ -21,7 +21,7 @@ use argmin::solver::trustregion::Steihaug;
 use argmin::solver::trustregion::TrustRegion;
 */
 
-use argmin::core::{CostFunction, Error, Executor, Gradient, Hessian, State};
+pub use argmin::core::{CostFunction, Error, Executor, Gradient, Hessian, State};
 
 use argmin::solver::gradientdescent::SteepestDescent;
 use argmin::solver::linesearch::MoreThuenteLineSearch;
@@ -252,7 +252,7 @@ where
 
 /// Pack model description into a state vector
 /// rs, rn0(initial radon conc), exflow
-fn pack_state_vector<P>(
+pub fn pack_state_vector<P>(
     radon: &[P],
     p: DetectorParams<P>,
     ts: InputTimeSeries,
@@ -263,14 +263,12 @@ where
 {
     let mut values = Vec::new();
 
-    let mut radon_transformed = radon.to_owned();
-
-    // Do the tranform
+    // TODO: modify this to include transforms?
     // transform_radon_concs(&mut radon_transformed).expect("Forward transform failed");
 
     values.push(p.r_screen_scale);
     values.push(p.exflow_scale);
-    values.extend(radon_transformed.iter());
+    values.extend(radon.iter());
 
     values
 }
@@ -328,7 +326,7 @@ impl Model for DetectorInverseModel<f64> {
 }
 
 impl<P: Float+std::fmt::Debug> DetectorInverseModel<P> {
-    fn lnprob_f64(&self, theta:&[f64]) -> f64{
+    pub fn lnprob_f64(&self, theta:&[f64]) -> f64{
         let mut theta_p = Vec::<P>::with_capacity(theta.len());
         for itm in theta{
             theta_p.push(P::from(*itm).unwrap())
@@ -340,7 +338,7 @@ impl<P: Float+std::fmt::Debug> DetectorInverseModel<P> {
     usable with the autdiff crate
     */
     #[inline(always)]
-    fn generic_lnprob(&self, theta: &[P]) -> P {
+    pub fn generic_lnprob(&self, theta: &[P]) -> P {
         // Note: invalid prior results are signaled by
         // returning -std::f64::INFINITY
 
@@ -593,6 +591,7 @@ fn calc_radon_without_deconvolution(ts: &InputTimeSeries, time_step: f64) -> Vec
         .collect()
 }
 
+#[inline(always)]
 pub fn fit_inverse_model(
     // TODO: differentiable types for the first argument
     p: DetectorParams<f64>,
@@ -615,7 +614,8 @@ pub fn fit_inverse_model(
 
     // 1. Initialisation
     // Define initial parameter vector and cost function
-    println!("Initial radon concentration: {:?}", initial_radon);
+    
+    //println!("Initial radon concentration: {:?}", initial_radon);
     let init_param = {
         let v = pack_state_vector(&initial_radon, p.clone(), ts.clone(), inv_opts);
         Array1::<f64>::from_vec(v)
@@ -650,14 +650,14 @@ pub fn fit_inverse_model(
                  .max_iters(1000)
                  .inv_hessian(init_hessian)
         })
-        .add_observer(SlogLogger::term(), ObserverMode::Always)
+        //.add_observer(SlogLogger::term(), ObserverMode::Every(100))
         .run()?;
 
 
-    println!("MAP optimisation complete: {}", res);
+    //println!("MAP optimisation complete: {}", res);
     let map = res.state.get_best_param().unwrap();
 
-    println!("Best params: {:?}", map);
+    //println!("Best params: {:?}", map);
 
     let map_vec = map.clone().into_raw_vec();
     let v = map_vec.as_slice();
@@ -666,8 +666,8 @@ pub fn fit_inverse_model(
 
     // inverse_transform_radon_concs(&mut map_radon).unwrap();
 
-    println!("Initial radon concentration: {:?}", initial_radon);
-    println!("MAP radon concentration:     {:?}", map_radon);
+    //println!("Initial radon concentration: {:?}", initial_radon);
+    //println!("MAP radon concentration:     {:?}", map_radon);
 
     /*
     // 3. Generate initial guess around the MAP point
@@ -759,11 +759,9 @@ mod tests {
         let initial_radon = calc_radon_without_deconvolution(&ts, time_step);
         let mut too_high_radon = initial_radon.clone();
         let rnavg = initial_radon.iter().sum::<f64>() / (initial_radon.len() as f64);
-        //for itm in too_high_radon.iter_mut().skip(1) {
-        //    *itm = rnavg * 100.0;
-        //}
-
-        too_high_radon[2] = 1.10;
+        for itm in too_high_radon.iter_mut().skip(1) {
+            *itm = rnavg * 100.0;
+        }
 
         dbg!(&too_high_radon);
         println!("Detector parameters: {:?}", p);
@@ -858,8 +856,7 @@ mod tests {
 
 
     #[test]
-    fn can_run_inverse_problem_constant() {
-        // TODO: set options for very small number of iterations
+    fn can_run_constant_inverse_problem() {
         let p = DetectorParamsBuilder::default().build().unwrap();
         let inv_opts = InversionOptionsBuilder::default().build().unwrap();
         let npts = 4;
@@ -872,7 +869,7 @@ mod tests {
         // TODO: set options for very small number of iterations
         let p = DetectorParamsBuilder::default().build().unwrap();
         let inv_opts = InversionOptionsBuilder::default().build().unwrap();
-        let npts = 4;
+        let npts = 15;
         let mut ts = get_timeseries(npts);
         ts.counts[npts-1] += 500.0;
         fit_inverse_model(p, inv_opts, ts).expect("Failed to fit inverse model");

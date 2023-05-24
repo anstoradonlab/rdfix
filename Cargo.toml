@@ -41,5 +41,29 @@ argmin_testfunctions = "0.1.1"
 #[dev-dependencies]
 #assert_approx_eq = "1.1"
 
+[profile.dev]
+opt-level = 3
+debug = true
+
 [profile.test]
 opt-level = 3
+debug = true
+
+[profile.release]
+opt-level = 3
+debug = true
+
+[[bin]]
+name="rdfix-deconvolve"
+path="src/main.rs"
+bench = false
+
+[lib]
+bench = false
+
+[dev-dependencies]
+criterion = { version = "0.5.0", features = ["html_reports"] }
+
+[[bench]]
+name = "inversion_benchmark"
+harness = false

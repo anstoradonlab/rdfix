@@ -3,6 +3,7 @@ use itertools::izip;
 use num::Float;
 
 /// Advance `state` from `t0` to `t1` by taking `num_steps` RK4 steps
+#[inline(always)]
 pub fn integrate<P>(state: &mut[P; NUM_STATE_VARIABLES], model: &DetectorForwardModel<P>, t0: P, t1: P, num_steps: usize) 
 where P: Float + std::fmt::Debug,
 {

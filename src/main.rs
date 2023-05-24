@@ -1,5 +1,10 @@
-use rdfix::forward::DetectorParamsBuilder;
-use autodiff::FT;
+use autodiff::{F1, FT};
+
+use rdfix::forward::{DetectorForwardModelBuilder, DetectorParamsBuilder};
+use rdfix::get_test_timeseries;
+use rdfix::inverse::{
+    fit_inverse_model, pack_state_vector, DetectorInverseModel, Gradient, InversionOptionsBuilder,
+};
 
 /* MAKEITWORK
 use rdfix::inverse::{
@@ -42,4 +47,15 @@ fn main() {
     fit_inverse_model(p, inv_opts, ts).unwrap();
 
     */
+
+    println!("Running a simple test case...");
+
+    let p = DetectorParamsBuilder::default().build().unwrap();
+    let inv_opts = InversionOptionsBuilder::default().build().unwrap();
+    let npts = 40;
+    let mut ts = get_test_timeseries(npts);
+    ts.counts[npts - 1] += 500.0;
+
+    fit_inverse_model(p.clone(), inv_opts.clone(), ts.clone()).expect("Failed to fit inverse model")
+
 }
