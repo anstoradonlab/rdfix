@@ -40,7 +40,6 @@ use rand_pcg::Pcg64;
 
 // use ndarray::{Array, Array1, Array2};
 
-use finitediff::FiniteDiff;
 use log::{debug, error, info, log_enabled};
 use statrs::function::logistic::{checked_logit, logistic, logit};
 

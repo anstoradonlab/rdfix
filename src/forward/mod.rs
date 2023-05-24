@@ -32,7 +32,7 @@ let idx = x.to_usize().unwrap();
 
 use derive_builder::Builder;
 //use ode_solvers::dop853::*;
-use ode_solvers::*;
+//use ode_solvers::*;
 pub mod constants;
 pub mod quickplot;
 pub mod stepper;
@@ -200,18 +200,6 @@ instead of defining State, use [P; NUM_STATE_VARIABLES]
 
 */
 
-impl<P: Float + std::fmt::Debug> DetectorForwardModel<P> {
-    #[inline(always)]
-    fn rate_of_change(
-        &self,
-        t: P,
-        y: &[P; NUM_STATE_VARIABLES],
-        dy: &mut [P; NUM_STATE_VARIABLES],
-    ) {
-        self.system(t.to_f64().unwrap(), y, dy)
-    }
-}
-
 fn vec_as<T,P>(v: &[T]) -> Vec<P>
 where 
     P: Float,
@@ -220,10 +208,26 @@ where
     v.iter().map( |x| P::from(*x).unwrap()).collect()
 }
 
-impl<P> ode_solvers::System<[P; NUM_STATE_VARIABLES]> for DetectorForwardModel<P>
-where
-    P: Float + std::fmt::Debug,
-{
+
+impl<P: Float + std::fmt::Debug> DetectorForwardModel<P> {
+
+    #[inline(always)]
+    fn rate_of_change(
+        &self,
+        t: P,
+        y: &[P; NUM_STATE_VARIABLES],
+        dy: &mut [P; NUM_STATE_VARIABLES],
+    ) {
+        self.system(t.to_f64().unwrap(), y, dy)
+    }    
+//}    
+//
+//impl<P> ode_solvers::System<[P; NUM_STATE_VARIABLES]> for DetectorForwardModel<P>
+//where
+//    P: Float + std::fmt::Debug,
+//
+//
+//{
     #[inline(always)]
     fn system(&self, t: f64, y: &[P; NUM_STATE_VARIABLES], dy: &mut [P; NUM_STATE_VARIABLES]) {
         // TODO: enforce this earlier

@@ -979,15 +979,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "finitediff"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e29b3f2b07b398985f495a66466e0a1fd105e022c25e1fd7042b60402cba765a"
-dependencies = [
- "ndarray",
-]
-
-[[package]]
 name = "flate2"
 version = "1.0.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1716,23 +1707,7 @@ dependencies = [
  "num-traits",
  "rand",
  "rand_distr",
- "simba 0.6.0",
- "typenum",
-]
-
-[[package]]
-name = "nalgebra"
-version = "0.31.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20bd243ab3dbb395b39ee730402d2e5405e448c75133ec49cc977762c4cba3d1"
-dependencies = [
- "approx 0.5.1",
- "matrixmultiply",
- "nalgebra-macros",
- "num-complex 0.4.3",
- "num-rational 0.4.1",
- "num-traits",
- "simba 0.7.3",
+ "simba",
  "typenum",
 ]
 
@@ -1974,18 +1949,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ea86265d3d3dcb6a27fc51bd29a4bf387fae9d2986b823079d4986af253eb439"
 dependencies = [
  "memchr",
-]
-
-[[package]]
-name = "ode_solvers"
-version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "839b747e416119a43c2f80363df32a44f20e39421a1b8d497a92c3ebe4dbd93f"
-dependencies = [
- "nalgebra 0.31.4",
- "num-traits",
- "simba 0.7.3",
- "thiserror",
 ]
 
 [[package]]
@@ -2634,7 +2597,6 @@ dependencies = [
  "debug_plotter",
  "derive_builder",
  "env_logger",
- "finitediff",
  "hammer-and-sample",
  "indicatif",
  "itertools",
@@ -2642,7 +2604,6 @@ dependencies = [
  "ndarray",
  "num 0.4.0",
  "num-traits",
- "ode_solvers",
  "openblas-src",
  "plotlib",
  "plotters",
@@ -2939,19 +2900,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "simba"
-version = "0.7.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f3fd720c48c53cace224ae62bef1bbff363a70c68c4802a78b5cc6159618176"
-dependencies = [
- "approx 0.5.1",
- "num-complex 0.4.3",
- "num-traits",
- "paste",
- "wide",
-]
-
-[[package]]
 name = "simdutf8"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3080,7 +3028,7 @@ checksum = "2d08e5e1748192713cc281da8b16924fb46be7b0c2431854eadc785823e5696e"
 dependencies = [
  "approx 0.5.1",
  "lazy_static",
- "nalgebra 0.29.0",
+ "nalgebra",
  "num-traits",
  "rand",
 ]
