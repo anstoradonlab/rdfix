@@ -1,5 +1,7 @@
 mod generic_primitives;
 
+use crate::inverse::generic_primitives::exp_transform;
+
 use self::generic_primitives::{lognormal_ln_pdf, poisson_ln_pmf, normal_ln_pdf};
 
 use super::forward::{
@@ -265,8 +267,8 @@ where
     // TODO: modify this to include transforms?
     // transform_radon_concs(&mut radon_transformed).expect("Forward transform failed");
 
-    values.push(p.r_screen_scale);
-    values.push(p.exflow_scale);
+    values.push(p.r_screen_scale.ln());
+    values.push(p.exflow_scale.ln());
     values.extend(radon.iter());
 
     values
@@ -344,10 +346,25 @@ impl<P: Float+std::fmt::Debug> DetectorInverseModel<P> {
         let mut lp = P::zero();
         // Priors
 
-        let (mut r_screen_scale, mut exflow_scale, radon_transformed) =
+        let (log_r_screen_scale, log_exflow_scale, radon_transformed) =
             unpack_state_vector(&theta, &self.inv_opts);
+        let (mut r_screen_scale, lp_inc) = exp_transform(log_r_screen_scale);
+        lp = lp+lp_inc;
+        let (mut exflow_scale, lp_inc) = exp_transform(log_exflow_scale);
+        lp = lp+lp_inc;
 
-        let mut radon = radon_transformed.to_owned();
+        // TODO: FIXME, this calculation could go elsewhere
+        let radon_reference_value = {
+            let rn = calc_radon_without_deconvolution(&self.ts, self.fwd.time_step.to_f64().unwrap());
+            let rnavg: f64 = rn.iter().fold(0.0, |acc, e| acc + e) / (rn.len() as f64);
+            P::from(rnavg).unwrap()
+        };
+
+        let radon: Vec<_> = radon_transformed.iter().map(|x| {
+            let (x_t, lp_inc) = exp_transform(*x);
+            lp = lp+lp_inc;
+            x_t * radon_reference_value
+        }).collect();
 
         // Do the inverse transform
         // inverse_transform_radon_concs(&mut radon).expect("Inverse transform failure");
@@ -472,7 +489,7 @@ impl<P: Float+std::fmt::Debug> DetectorInverseModel<P> {
     }
 }
 
-/// 'agrmin' CostFunction trait
+/// 'argmin' CostFunction trait
 impl CostFunction for DetectorInverseModel<FT<f64>> {
     type Param = Array1<f64>;
     type Output = f64;
@@ -485,7 +502,7 @@ impl CostFunction for DetectorInverseModel<FT<f64>> {
     }
 }
 
-/// 'agrmin' CostFunction trait for concrete InverseModel
+/// 'argmin' CostFunction trait for concrete InverseModel
 /// (can't define Gradient for this version)
 impl CostFunction for DetectorInverseModel<f64> {
     type Param = Array1<f64>;
@@ -500,7 +517,7 @@ impl CostFunction for DetectorInverseModel<f64> {
 }
 
 
-/// 'agrmin' Gradient trait
+/// 'argmin' Gradient trait
 impl Gradient for DetectorInverseModel<FT<f64>> {
     /// Type of the parameter vector
     type Param = Array1<f64>;
@@ -598,8 +615,7 @@ pub fn fit_inverse_model(
     ts: InputTimeSeries,
 ) -> Result<(), Error> 
 {
-    let v = vec![1, 2, 3, 4];
-    let s = v.as_slice();
+    let npts = ts.len();
     let time_step = 60.0 * 30.0; //TODO
     let time_step_diff = FT::<f64>::cst(time_step);
 
@@ -615,6 +631,7 @@ pub fn fit_inverse_model(
     // Define initial parameter vector and cost function
     
     //println!("Initial radon concentration: {:?}", initial_radon);
+    let initial_radon = vec![0.0; npts];
     let init_param = {
         let v = pack_state_vector(&initial_radon, p.clone(), ts.clone(), inv_opts);
         Array1::<f64>::from_vec(v)
