@@ -98,3 +98,4 @@ pub fn get_test_timeseries(npts: usize) -> InputRecordVec {
 
 pub mod forward;
 pub mod inverse;
+pub mod nuts;

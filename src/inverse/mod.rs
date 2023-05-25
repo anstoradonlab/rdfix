@@ -581,7 +581,7 @@ where
 }
 */
 
-fn calc_radon_without_deconvolution(ts: &InputTimeSeries, time_step: f64) -> Vec<f64> {
+pub fn calc_radon_without_deconvolution(ts: &InputTimeSeries, time_step: f64) -> Vec<f64> {
     ts.iter()
         .map(|itm| {
             let cps = itm.counts / time_step;
