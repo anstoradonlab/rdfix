@@ -14,8 +14,11 @@ anyhow = "1.0"
 env_logger = "0.10"
 log = "0.4"
 ndarray = { version = "0.15", features = ["blas", "serde"] }
+
+# switch to netlib BLAS when compiling release version, to avoid any dependencies on system BLAS
 blas-src = { version = "0.8", features = ["openblas"] }
 openblas-src = { version = "0.10", features = ["cblas", "system"] }
+#blas-src = { version = "0.8", default-features = false, features = ["netlib"] }
 
 num = "0.4"
 soa_derive = "0.13"
@@ -35,6 +38,8 @@ rand = "0.8.5"
 rand_pcg = "0.3.1"
 arrayvec = "0.7.2"
 argmin_testfunctions = "0.1.1"
+nuts-rs = "0.4"
+thiserror = "1.0"
 
 #finitediff = {version="0.1.4", features = ["ndarray"]}
 #ode_solvers = "0.3"
