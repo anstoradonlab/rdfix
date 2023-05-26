@@ -13,6 +13,9 @@ autodiff = "0.7"
 anyhow = "1.0"
 env_logger = "0.10"
 log = "0.4"
+csv = "1.2"
+serde = { version = "1", features = ["derive"] }
+
 ndarray = { version = "0.15", features = ["blas", "serde"] }
 
 # switch to netlib BLAS when compiling release version, to avoid any dependencies on system BLAS

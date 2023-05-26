@@ -8,6 +8,8 @@ use super::forward::{
     DetectorForwardModel, DetectorForwardModelBuilder, DetectorParams, DetectorParamsBuilder,
 };
 
+use indicatif::ProgressIterator;
+
 use super::*;
 
 use super::inverse::*;
@@ -55,7 +57,7 @@ impl PosteriorDensity {
             fwd: fwd,
         };
 
-        // TODO: don't hard code
+        // TODO: don't hard code the number of non-radon parameters (here, it's 2)
         let dim: usize = initial_radon.len() + 2;
 
         PosteriorDensity {
@@ -93,18 +95,20 @@ impl CpuLogpFunc for PosteriorDensity {
     }
 }
 
-fn test() {
+fn test(npts: usize, depth: Option<u64>) {
     // We get the default sampler arguments
     let mut sampler_args = SamplerArgs::default();
 
     // and modify as we like
     sampler_args.num_tune = 1000;
-    sampler_args.maxdepth = 3; // small value just for testing...
+    // maxdepth makes an enormous difference to runtime
+    if let Some(maxdepth) = depth{
+        sampler_args.maxdepth = maxdepth; // use a small value, e.g. 3 for testing...
+    }
 
     // We instanciate our posterior density function
     let p = DetectorParamsBuilder::default().build().unwrap();
     let inv_opts = InversionOptionsBuilder::default().build().unwrap();
-    let npts = 4;
     let ts = get_test_timeseries(npts);
 
     let logp_func = PosteriorDensity::new(p, inv_opts, ts);
@@ -116,22 +120,30 @@ fn test() {
 
     // Set to some initial position and start drawing samples.
     sampler
-        .set_position(&vec![1f64; dim])
+        .set_position(&vec![0.0f64; dim])
         .expect("Unrecoverable error during init");
     let mut trace = vec![]; // Collection of all draws
     let mut stats = vec![]; // Collection of statistics like the acceptance rate for each draw
-    for _ in 0..2000 {
+    for iter in (0..2000).progress()
+     {
         let (draw, info) = sampler.draw().expect("Unrecoverable error during sampling");
-        trace.push(draw);
+        
         let _info_vec = info.to_vec(); // We can collect the stats in a Vec
                                        // Or get more detailed information about divergences
         if let Some(div_info) = info.divergence_info() {
-            println!("Divergence at position {:?}", div_info.start_location());
+            println!(
+                "Divergence on iteration {:?} at position {:?}",
+                iter,
+                div_info.start_location()
+            );
         }
-        //dbg!(&info);
+        if iter % 100 == 0{
+            dbg!(&draw);
+            dbg!(&info);
+        }
+        trace.push(draw);
         stats.push(info);
     }
-    
 }
 
 #[cfg(test)]
@@ -140,6 +152,6 @@ mod tests {
 
     #[test]
     fn sample_nuts() {
-        test();
+        test(4, Some(3));
     }
 }
