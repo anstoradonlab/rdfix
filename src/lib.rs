@@ -12,14 +12,21 @@ extern crate soa_derive;
 #[derive(Debug, Clone, PartialEq, Copy, StructOfArray, Default, Serialize, Deserialize)]
 #[soa_derive(Clone, Debug, Serialize, Deserialize)]
 pub struct InputRecord {
+    /// Time measured in seconds since an arbitrary reference
     pub time: f64,
-    /// LLD minus ULD (ULD are noise), missing values marked with NaN
+    /// LLD counts minus ULD (ULD are noise), missing values marked with NaN.
+    /// The counts are measured over the last interval, `(t-dt, t)`
     pub counts: f64,
+    /// Background count rate measured per second at time `t`.
     pub background_count_rate: f64,
+    /// Sensitivity in `(detector cps) / (ambient Bq/m3)` at time `t`
     pub sensitivity: f64,
-    pub q_internal: f64, //volumetric, m3/sec
-    pub q_external: f64, //volumetric, m3/sec
-    pub airt: f64,       // degC
+    /// Internal flow rate, volumetric, m3/sec
+    pub q_internal: f64,
+    /// External flow rate, volumetric, m3/sec
+    pub q_external: f64,
+    /// Air temperature inside detector, degrees C
+    pub airt: f64,
 }
 
 /*
