@@ -102,7 +102,7 @@ fn test(npts: usize, depth: Option<u64>) {
     // and modify as we like
     sampler_args.num_tune = 1000;
     // maxdepth makes an enormous difference to runtime
-    if let Some(maxdepth) = depth{
+    if let Some(maxdepth) = depth {
         sampler_args.maxdepth = maxdepth; // use a small value, e.g. 3 for testing...
     }
 
@@ -124,10 +124,9 @@ fn test(npts: usize, depth: Option<u64>) {
         .expect("Unrecoverable error during init");
     let mut trace = vec![]; // Collection of all draws
     let mut stats = vec![]; // Collection of statistics like the acceptance rate for each draw
-    for iter in (0..2000).progress()
-     {
+    for iter in (0..2000).progress() {
         let (draw, info) = sampler.draw().expect("Unrecoverable error during sampling");
-        
+
         let _info_vec = info.to_vec(); // We can collect the stats in a Vec
                                        // Or get more detailed information about divergences
         if let Some(div_info) = info.divergence_info() {
@@ -137,7 +136,7 @@ fn test(npts: usize, depth: Option<u64>) {
                 div_info.start_location()
             );
         }
-        if iter % 100 == 0{
+        if iter % 100 == 0 {
             dbg!(&draw);
             dbg!(&info);
         }

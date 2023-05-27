@@ -25,7 +25,7 @@ fn main() -> Result<()> {
 
     let soln1 = fwd.numerical_expected_counts()?;
     let simulated_counts: Vec<_> = soln1.iter().map(|x| x.round()).collect();
-    for (x,y) in ts.counts.iter_mut().zip(simulated_counts){
+    for (x, y) in ts.counts.iter_mut().zip(simulated_counts) {
         *x = y;
     }
 
@@ -38,7 +38,7 @@ fn main() -> Result<()> {
     dbg!(&inv_results);
     dbg!(soln1);
 
-    for (x,y) in radon.iter().zip(inv_results){
+    for (x, y) in radon.iter().zip(inv_results) {
         println!("{x}, {y}");
     }
 

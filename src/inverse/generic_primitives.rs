@@ -123,21 +123,21 @@ pub fn poisson_ln_pmf<P: Float>(lambda: P, x: P) -> P {
 }
 
 /// Exponential transform, including log_p increment
-/// 
-/// To understand this, see: 
-/// 
+///
+/// To understand this, see:
+///
 /// "For univariate changes of variables, the resulting probability must be scaled by the absolute derivative of the transform."
 ///   -- https://mc-stan.org/docs/stan-users-guide/changes-of-variables.html
 ///  
 /// But, since we're working with log probabilities, instead of scaling
 /// we instead increment by log( ... )
-/// 
+///
 /// Also see this:
 /// https://mc-stan.org/docs/reference-manual/change-of-variables.html
 pub fn exp_transform<P: Float>(u: P) -> (P, P) {
     let maxu = (P::max_value()).ln();
     let mut u = u;
-    if u>maxu {
+    if u > maxu {
         u = maxu;
     }
     // | d/du (exp(u)) | = exp(u)
@@ -147,8 +147,8 @@ pub fn exp_transform<P: Float>(u: P) -> (P, P) {
 
 /// Inverse exponential transform (i.e. log), this doesn't need to report a change
 /// to the log_p
-/// 
-pub fn inverse_exp_transform<P:Float>(sigma:P) -> P{
+///
+pub fn inverse_exp_transform<P: Float>(sigma: P) -> P {
     sigma.ln()
 }
 

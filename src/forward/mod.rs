@@ -89,12 +89,14 @@ where
 }
 
 impl<P> DetectorParams<P>
-where P: Float+std::fmt::Debug,
+where
+    P: Float + std::fmt::Debug,
 {
-    pub fn into_inner_type<NP>(&self)->DetectorParams<NP>
-    where NP: Float+std::fmt::Debug,
+    pub fn into_inner_type<NP>(&self) -> DetectorParams<NP>
+    where
+        NP: Float + std::fmt::Debug,
     {
-        DetectorParams{
+        DetectorParams {
             exflow_scale: NP::from(self.exflow_scale).unwrap(),
             inflow: NP::from(self.inflow).unwrap(),
             volume: NP::from(self.volume).unwrap(),
@@ -105,7 +107,6 @@ where P: Float+std::fmt::Debug,
             volume_delay_1: NP::from(self.volume_delay_1).unwrap(),
             volume_delay_2: NP::from(self.volume_delay_2).unwrap(),
             plateout_time_constant: NP::from(self.plateout_time_constant).unwrap(),
-
         }
     }
 }
@@ -150,6 +151,8 @@ where
     pub cal_begin: P,
     #[builder(default = "P::from(0.0).unwrap()")]
     pub cal_duration: P,
+    #[builder(default = "60")]
+    pub integration_substeps: usize,
 }
 
 /// interpolation utility functions
@@ -158,13 +161,11 @@ where
     P: Float + std::fmt::Debug,
 {
     let yi = {
-        if ti <= P::zero(){
+        if ti <= P::zero() {
             y[0]
-        }
-        else if ti >= P::from(tmax).unwrap(){
-            y[y.len()-1]
-        }
-        else{
+        } else if ti >= P::from(tmax).unwrap() {
+            y[y.len() - 1]
+        } else {
             assert!(ti <= P::from(tmax).unwrap());
             assert!(ti >= P::from(0.0).unwrap());
             let time_step = tmax / P::from(y.len() - 1).unwrap();
@@ -185,7 +186,11 @@ where
 {
     let time_step = tmax / P::from(y.len() - 1).unwrap();
     let p = ti / P::from(time_step).unwrap();
-    let idx1 = if ti <= P::zero() {0} else {p.ceil().to_usize().unwrap()};
+    let idx1 = if ti <= P::zero() {
+        0
+    } else {
+        p.ceil().to_usize().unwrap()
+    };
     P::from(y[idx1]).unwrap()
 }
 
@@ -200,17 +205,15 @@ instead of defining State, use [P; NUM_STATE_VARIABLES]
 
 */
 
-fn vec_as<T,P>(v: &[T]) -> Vec<P>
-where 
+fn vec_as<T, P>(v: &[T]) -> Vec<P>
+where
     P: Float,
     T: ToPrimitive + Copy,
 {
-    v.iter().map( |x| P::from(*x).unwrap()).collect()
+    v.iter().map(|x| P::from(*x).unwrap()).collect()
 }
 
-
 impl<P: Float + std::fmt::Debug> DetectorForwardModel<P> {
-
     #[inline(always)]
     fn rate_of_change(
         &self,
@@ -219,15 +222,15 @@ impl<P: Float + std::fmt::Debug> DetectorForwardModel<P> {
         dy: &mut [P; NUM_STATE_VARIABLES],
     ) {
         self.system(t.to_f64().unwrap(), y, dy)
-    }    
-//}    
-//
-//impl<P> ode_solvers::System<[P; NUM_STATE_VARIABLES]> for DetectorForwardModel<P>
-//where
-//    P: Float + std::fmt::Debug,
-//
-//
-//{
+    }
+    //}
+    //
+    //impl<P> ode_solvers::System<[P; NUM_STATE_VARIABLES]> for DetectorForwardModel<P>
+    //where
+    //    P: Float + std::fmt::Debug,
+    //
+    //
+    //{
     #[inline(always)]
     fn system(&self, t: f64, y: &[P; NUM_STATE_VARIABLES], dy: &mut [P; NUM_STATE_VARIABLES]) {
         // TODO: enforce this earlier
@@ -254,24 +257,23 @@ impl<P: Float + std::fmt::Debug> DetectorForwardModel<P> {
         let p_lamc = P::from(LAMC).unwrap();
 
         // interpolate inputs to current point in time
-        let airt_points = vec_as::<_,P>(&self.data.airt);
+        let airt_points = vec_as::<_, P>(&self.data.airt);
         let _airt_l = linear_interpolation(ti, &airt_points, tmax);
         let _airt_s = stepwise_interpolation(ti, &airt_points, tmax);
 
         // TODO: make radon switchable between linear and stepwise
         let radon = linear_interpolation(ti, &self.radon, tmax);
-        
+
         // Extract interpolated values from linear or stepwise,
         // depending on the variable
-        let q_external_points = vec_as::<_,P>(&self.data.q_external);
-        let q_internal_points = vec_as::<_,P>(&self.data.q_internal);
-        let sensitivity_points = vec_as::<_,P>(&self.data.sensitivity);
-        let background_count_rate_points = vec_as::<_,P>(&self.data.background_count_rate);
+        let q_external_points = vec_as::<_, P>(&self.data.q_external);
+        let q_internal_points = vec_as::<_, P>(&self.data.q_internal);
+        let sensitivity_points = vec_as::<_, P>(&self.data.sensitivity);
+        let background_count_rate_points = vec_as::<_, P>(&self.data.background_count_rate);
         let q_external = stepwise_interpolation(ti, &q_external_points, tmax);
         let q_internal = stepwise_interpolation(ti, &q_internal_points, tmax);
         let sensitivity = linear_interpolation(ti, &sensitivity_points, tmax);
-        let background_count_rate =
-            linear_interpolation(ti, &background_count_rate_points, tmax);
+        let background_count_rate = linear_interpolation(ti, &background_count_rate_points, tmax);
         // scale factors (used in inversion)
         assert!(self.p.exflow_scale >= P::zero());
         assert!(self.p.r_screen_scale >= P::zero());
@@ -334,8 +336,8 @@ impl<P: Float + std::fmt::Debug> DetectorForwardModel<P> {
         let d_nrnd2_dt: P;
         if v_delay_1 == P::zero() {
             // no delay tanks
-            d_nrn_dt =
-                q_external / self.p.volume * (n_rn_ext + n_rn_cal + n_rn_inj - n_rn) - n_rn * p_lamrn;
+            d_nrn_dt = q_external / self.p.volume * (n_rn_ext + n_rn_cal + n_rn_inj - n_rn)
+                - n_rn * p_lamrn;
             // Nrnd,Nrnd2 become unimportant, but we need to do something with them
             // so just apply the same equation as for Nrn
             d_nrnd1_dt = q_external / self.p.volume * (n_rn_ext + n_rn_cal + n_rn_inj - n_rn)
@@ -345,13 +347,16 @@ impl<P: Float + std::fmt::Debug> DetectorForwardModel<P> {
         } else if v_delay_1 > P::zero() && v_delay_2 == P::zero() {
             //one delay tank
             d_nrn_dt = q_external / self.p.volume * (n_rn_d1 + n_rn_cal - n_rn) - n_rn * p_lamrn;
-            d_nrnd1_dt = q_external / v_delay_1 * (n_rn_ext + n_rn_inj - n_rn_d1) - n_rn_d1 * p_lamrn;
+            d_nrnd1_dt =
+                q_external / v_delay_1 * (n_rn_ext + n_rn_inj - n_rn_d1) - n_rn_d1 * p_lamrn;
             //unused, but apply same eqn as delay tank 1
-            d_nrnd2_dt = q_external / v_delay_1 * (n_rn_ext + n_rn_inj - n_rn_d1) - n_rn_d2 * p_lamrn;
+            d_nrnd2_dt =
+                q_external / v_delay_1 * (n_rn_ext + n_rn_inj - n_rn_d1) - n_rn_d2 * p_lamrn;
         } else {
             //two delay tanks
             d_nrn_dt = q_external / self.p.volume * (n_rn_d1 + n_rn_cal - n_rn) - n_rn * p_lamrn;
-            d_nrnd1_dt = q_external / v_delay_1 * (n_rn_ext + n_rn_inj - n_rn_d1) - n_rn_d1 * p_lamrn;
+            d_nrnd1_dt =
+                q_external / v_delay_1 * (n_rn_ext + n_rn_inj - n_rn_d1) - n_rn_d1 * p_lamrn;
             d_nrnd2_dt = q_external / v_delay_2 * (n_rn_d1 - n_rn_d2) - n_rn_d2 * p_lamrn;
         }
 
@@ -377,7 +382,6 @@ impl<P: Float + std::fmt::Debug> DetectorForwardModel<P> {
         dy[IDX_FB] = d_fb_dt;
         dy[IDX_FC] = d_fc_dt;
         dy[IDX_ACC_COUNTS] = d_acc_counts_dt + background_count_rate;
-
     }
 }
 
@@ -439,13 +443,12 @@ impl<P> DetectorForwardModel<P>
 where
     P: Float + std::fmt::Debug,
 {
-
-
-    pub fn into_inner_type<NP>(&self)->DetectorForwardModel<NP>
-    where NP: Float+std::fmt::Debug,
+    pub fn into_inner_type<NP>(&self) -> DetectorForwardModel<NP>
+    where
+        NP: Float + std::fmt::Debug,
     {
         let radon = self.radon.iter().map(|x| NP::from(*x).unwrap()).collect();
-        DetectorForwardModel::<NP>{
+        DetectorForwardModel::<NP> {
             p: self.p.into_inner_type::<NP>(),
             data: self.data.clone(),
             time_step: NP::from(self.time_step).unwrap(),
@@ -532,9 +535,9 @@ where
         let mut t = t0;
         let mut expected_counts = Vec::with_capacity(num_steps);
         let mut y_out = Vec::with_capacity(num_steps);
-        for _ in 0..num_intervals{
+        for _ in 0..num_intervals {
             state[IDX_ACC_COUNTS] = P::zero();
-            integrate(&mut state, &self, t, t+dt, num_steps);
+            integrate(&mut state, &self, t, t + dt, num_steps);
             // TODO: maybe just return the expected counts??
             expected_counts.push(state[IDX_ACC_COUNTS]);
             y_out.push(state.clone());
@@ -560,8 +563,8 @@ mod tests {
     use debug_plotter::plot;
 
     use super::*;
-    use quickplot::draw_plot;
     use assert_approx_eq::assert_approx_eq;
+    use quickplot::draw_plot;
 
     fn get_timeseries(npts: usize) -> InputRecordVec {
         let trec = InputRecord {
@@ -654,8 +657,7 @@ mod tests {
     /// If the ambient radon concentration is zero, the count rate
     /// should be equal to the background count rate
     #[test]
-    fn count_rate_equals_background_with_zero_radon(){
-
+    fn count_rate_equals_background_with_zero_radon() {
         let trec = InputRecord {
             time: 0.0,
             /// LLD minus ULD (ULD are noise), missing values marked with NaN
@@ -668,7 +670,7 @@ mod tests {
             airt: 21.0,                       // degC
         };
         const N: usize = 10;
-        const DT: f64 = 30.0*60.0;
+        const DT: f64 = 30.0 * 60.0;
         let mut data = InputTimeSeries::from_iter(vec![trec; N]);
         let radon = vec![0.0; N];
 
@@ -677,7 +679,6 @@ mod tests {
         }
 
         let expected_counts_per_30min = trec.background_count_rate * DT;
-
 
         let fwd = DetectorForwardModelBuilder::default()
             .data(data)
@@ -689,19 +690,15 @@ mod tests {
         dbg!(expected_counts_per_30min);
         println!("{:#?}", num_counts);
 
-        for nc in num_counts{
+        for nc in num_counts {
             assert_approx_eq!(nc, expected_counts_per_30min);
         }
-
-
-
     }
 
     /// If the ambient radon concentration is constant, the count rate
     /// should be constant and easy to calculate from the senstivity
     #[test]
-    fn count_rate_at_constant_radon(){
-
+    fn count_rate_at_constant_radon() {
         let trec = InputRecord {
             time: 0.0,
             /// LLD minus ULD (ULD are noise), missing values marked with NaN
@@ -714,7 +711,7 @@ mod tests {
             airt: 21.0,                       // degC
         };
         const N: usize = 4;
-        const DT: f64 = 30.0*60.0;
+        const DT: f64 = 30.0 * 60.0;
         let mut data = InputTimeSeries::from_iter(vec![trec; N]);
         let radon = vec![1.0; N];
 
@@ -723,7 +720,6 @@ mod tests {
         }
 
         let expected_counts_per_30min = trec.background_count_rate * DT + 1000.0;
-
 
         let fwd = DetectorForwardModelBuilder::default()
             .data(data)
@@ -735,12 +731,10 @@ mod tests {
         dbg!(expected_counts_per_30min);
         println!("{:#?}", num_counts);
 
-        for nc in num_counts{
+        for nc in num_counts {
             assert_approx_eq!(nc, expected_counts_per_30min);
         }
-
     }
-
 
     #[test]
     fn can_integrate_using_builder() {
@@ -776,6 +770,5 @@ mod tests {
         println!("{:#?}", num_counts);
 
         draw_plot(&num_counts[..], "test.svg").unwrap();
-
     }
 }
