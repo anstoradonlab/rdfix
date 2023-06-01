@@ -10,7 +10,7 @@ fn main() -> Result<()> {
     let radon = {
         let mut v = vec![1.0_f64; npts];
         for x in v[5..20].iter_mut() {
-            *x = 100.0;
+            *x = 1000.0;
         }
         v
     };
@@ -32,7 +32,7 @@ fn main() -> Result<()> {
     }
 
     let p = DetectorParamsBuilder::<f64>::default().build()?;
-    let inv_opts = InversionOptionsBuilder::default().r_screen_sigma(1e-3).exflow_sigma(1e-3).build()?;
+    let inv_opts = InversionOptionsBuilder::default().r_screen_sigma(1e-6).exflow_sigma(1e-6).build()?;
 
     println!("Running inverse problem");
     let inv_results = fit_inverse_model(p, inv_opts, ts)?;

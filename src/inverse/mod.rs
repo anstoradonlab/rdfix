@@ -1,5 +1,6 @@
 mod generic_primitives;
 
+use crate::inverse;
 use crate::inverse::generic_primitives::exp_transform;
 
 use self::generic_primitives::{lognormal_ln_pdf, normal_ln_pdf, poisson_ln_pmf};
@@ -11,6 +12,7 @@ use argmin::solver::linesearch::BacktrackingLineSearch;
 use argmin::core::LineSearch;
 use argmin::solver::linesearch::HagerZhangLineSearch;
 use argmin::solver::linesearch::condition::ArmijoCondition;
+use cobyla::CobylaSolver;
 use ndarray::Array1;
 use ndarray::Array2;
 use statrs::distribution::{Continuous, Discrete, LogNormal, Normal, Poisson};
@@ -347,9 +349,9 @@ impl<P: Float + std::fmt::Debug> DetectorInverseModel<P> {
         let (log_r_screen_scale, log_exflow_scale, radon_transformed) =
             unpack_state_vector(&theta, &self.inv_opts);
         let (mut r_screen_scale, lp_inc) = exp_transform(log_r_screen_scale);
-        lp = lp; // + lp_inc;
+        //lp = lp - lp_inc;
         let (mut exflow_scale, lp_inc) = exp_transform(log_exflow_scale);
-        lp = lp; // + lp_inc;
+        //lp = lp - lp_inc;
 
         // println!("{:?} {:?}", log_exflow_scale, exflow_scale);
 
@@ -424,12 +426,13 @@ impl<P: Float + std::fmt::Debug> DetectorInverseModel<P> {
         
         let r_screen_scale = (r_screen_scale - P::one()) * r_screen_scale_sigma + P::one();
 
+
         let exflow_scale_mu = P::one();
         let exflow_sigma = P::from(self.inv_opts.exflow_sigma).unwrap();
         lprior = lprior + normal_ln_pdf(exflow_scale_mu, P::one(), exflow_scale);
 
         let exflow_scale = (exflow_scale - P::one()) * exflow_sigma + P::one();
-
+   
         // println!("{:?} {:?} {:?} {:?} || {:?} {:?} || {:?}", r_screen_scale_mu, r_screen_scale_sigma, exflow_scale_mu, exflow_sigma, r_screen_scale, exflow_scale, lprior);
 
         // Normal priors on the radon scale factor.  This is applied to keep this parameter
@@ -469,7 +472,7 @@ impl<P: Float + std::fmt::Debug> DetectorInverseModel<P> {
             .map(|x| {
                 let (x_t, lp_inc) = exp_transform(*x);
                 // increment lp because of the change-of-variables
-                // lp = lp + lp_inc;
+                lp = lp - lp_inc;
                 x_t * radon_reference_value
             })
             .collect();
@@ -571,6 +574,22 @@ impl CostFunction for DetectorInverseModel<f64> {
         Ok(minus_lp)
     }
 }
+
+struct CobylaDetectorInverseModel(DetectorInverseModel<FT<f64>>);
+
+impl CostFunction for CobylaDetectorInverseModel {
+    type Param = Vec<f64>;
+    type Output = Vec<f64>;
+
+    fn cost(&self, param: &Self::Param) -> Result<Self::Output, Error> {
+        let minus_lp = -self.0.lnprob_f64(param.as_slice());
+        // TODO: if lp is -std::f64::INFINITY then we should probably
+        // return an error
+        Ok(vec![minus_lp])
+    }
+}
+
+
 
 /// 'argmin' Gradient trait
 impl Gradient for DetectorInverseModel<FT<f64>> {
@@ -710,7 +729,7 @@ pub fn fit_inverse_model(
 
     // 2. Optimisation (MAP)
 
-
+/*
     let linesearch = MoreThuenteLineSearch::new().with_bounds(1e-10, 0.005)?.with_width_tolerance(1e-3)?;
 
     /*
@@ -724,9 +743,6 @@ pub fn fit_inverse_model(
     };
     */
     
-
-
-
     //let solver = SteepestDescent::new(linesearch);
     let solver = BFGS::new(linesearch)
         .with_tolerance_cost(1e-2)?
@@ -744,6 +760,19 @@ pub fn fit_inverse_model(
         })
         .add_observer(SlogLogger::term(), ObserverMode::Every(1))
         .run();
+*/
+
+    // COBYLA solver version
+    let mut cob_inverse_model = CobylaDetectorInverseModel(inverse_model.clone());
+    let solver = CobylaSolver::new(init_param.as_slice().unwrap().to_owned());
+    let res = Executor::new(cob_inverse_model, solver)
+            .configure(|state| {
+                let mut state = state.max_iters(50_000);
+                state.maxfun = 100_000;
+                state})
+            .add_observer(SlogLogger::term(), ObserverMode::Every(100))
+            .run();
+
 
     if let Err(e) = &res{
         println!("Error: {e}");
@@ -757,7 +786,9 @@ pub fn fit_inverse_model(
 
     //println!("Best params: {:?}", map);
 
-    let map_vec = map.clone().into_raw_vec();
+    //let map_vec = map.clone().into_raw_vec();
+
+    let map_vec = map.clone().to_vec();
     let v = map_vec.as_slice();
     let (transformed_r_screen_scale, transformed_exflow_scale, transformed_map_radon) = unpack_state_vector(&v, &inv_opts);
 
