@@ -155,6 +155,17 @@ where
     #[builder(default = "DetectorParamsBuilder::default().build().unwrap()")]
     pub p: DetectorParams<P>,
     pub data: InputTimeSeries,
+    #[builder(default = "vec_as::<_, P>(&self.data.as_ref().unwrap().airt)")]
+    pub airt_points: Vec<P>,
+    #[builder(default = "vec_as::<_, P>(&self.data.as_ref().unwrap().q_external)")]
+    pub q_external_points: Vec<P>,
+    #[builder(default = "vec_as::<_, P>(&self.data.as_ref().unwrap().q_internal)")]
+    pub q_internal_points: Vec<P>,
+    #[builder(default = "vec_as::<_, P>(&self.data.as_ref().unwrap().sensitivity)")]
+    pub sensitivity_points: Vec<P>,
+    #[builder(default = "vec_as::<_, P>(&self.data.as_ref().unwrap().background_count_rate)")]
+    pub background_count_rate_points: Vec<P>,
+    
     pub time_step: P,
     pub radon: Vec<P>,
     #[builder(default = "P::from(0.0).unwrap()")]
@@ -172,6 +183,7 @@ where
     #[builder(default = "60")]
     pub integration_substeps: usize,
 }
+
 
 /// interpolation utility functions
 fn linear_interpolation<P>(ti: P, y: &[P], tmax: P) -> P
@@ -275,7 +287,7 @@ impl<P: Float + std::fmt::Debug> DetectorForwardModel<P> {
         let p_lamc = P::from(LAMC).unwrap();
 
         // interpolate inputs to current point in time
-        let airt_points = vec_as::<_, P>(&self.data.airt);
+        let airt_points = &self.airt_points;
         let _airt_l = linear_interpolation(ti, &airt_points, tmax);
         let _airt_s = stepwise_interpolation(ti, &airt_points, tmax);
 
@@ -284,10 +296,10 @@ impl<P: Float + std::fmt::Debug> DetectorForwardModel<P> {
 
         // Extract interpolated values from linear or stepwise,
         // depending on the variable
-        let q_external_points = vec_as::<_, P>(&self.data.q_external);
-        let q_internal_points = vec_as::<_, P>(&self.data.q_internal);
-        let sensitivity_points = vec_as::<_, P>(&self.data.sensitivity);
-        let background_count_rate_points = vec_as::<_, P>(&self.data.background_count_rate);
+        let q_external_points = &self.q_external_points;
+        let q_internal_points = &self.q_internal_points;
+        let sensitivity_points = &self.sensitivity_points;
+        let background_count_rate_points = &self.background_count_rate_points;
         let q_external = stepwise_interpolation(ti, &q_external_points, tmax);
         let q_internal = stepwise_interpolation(ti, &q_internal_points, tmax);
         let sensitivity = linear_interpolation(ti, &sensitivity_points, tmax);
@@ -469,6 +481,11 @@ where
         DetectorForwardModel::<NP> {
             p: self.p.into_inner_type::<NP>(),
             data: self.data.clone(),
+            airt_points: vec_as::<_, NP>(&self.data.airt),
+            q_external_points: vec_as::<_, NP>(&self.data.q_external),
+            q_internal_points: vec_as::<_, NP>(&self.data.q_internal),
+            sensitivity_points: vec_as::<_, NP>(&self.data.sensitivity),
+            background_count_rate_points: vec_as::<_, NP>(&self.data.background_count_rate),
             time_step: NP::from(self.time_step).unwrap(),
             radon: radon,
             integration_substeps: 60,
