@@ -56,5 +56,6 @@ fn main() {
     let mut ts = get_test_timeseries(npts);
     ts.counts[npts - 1] += 500.0;
 
-    fit_inverse_model(p.clone(), inv_opts.clone(), ts.clone()).expect("Failed to fit inverse model");
+    fit_inverse_model(p.clone(), inv_opts.clone(), ts.clone())
+        .expect("Failed to fit inverse model");
 }

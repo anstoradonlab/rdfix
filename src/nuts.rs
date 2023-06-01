@@ -1,9 +1,9 @@
+use anyhow::{anyhow, bail, Context, Result};
 use argmin::core::Gradient;
 use autodiff::F1;
 use ndarray::{Array1, ArrayView1};
 use nuts_rs::{new_sampler, Chain, CpuLogpFunc, LogpError, SampleStats, SamplerArgs};
 use thiserror::Error;
-use anyhow::{bail, Context, Result, anyhow};
 
 use super::forward::{
     DetectorForwardModel, DetectorForwardModelBuilder, DetectorParams, DetectorParamsBuilder,

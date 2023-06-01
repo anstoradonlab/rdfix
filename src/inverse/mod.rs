@@ -8,10 +8,10 @@ use self::generic_primitives::{lognormal_ln_pdf, normal_ln_pdf, poisson_ln_pmf};
 use super::forward::{
     DetectorForwardModel, DetectorForwardModelBuilder, DetectorParams, DetectorParamsBuilder,
 };
-use argmin::solver::linesearch::BacktrackingLineSearch;
 use argmin::core::LineSearch;
-use argmin::solver::linesearch::HagerZhangLineSearch;
 use argmin::solver::linesearch::condition::ArmijoCondition;
+use argmin::solver::linesearch::BacktrackingLineSearch;
+use argmin::solver::linesearch::HagerZhangLineSearch;
 use cobyla::CobylaSolver;
 use ndarray::Array1;
 use ndarray::Array2;
@@ -355,7 +355,6 @@ impl<P: Float + std::fmt::Debug> DetectorInverseModel<P> {
 
         // println!("{:?} {:?}", log_exflow_scale, exflow_scale);
 
-
         // Do the inverse transform
         // inverse_transform_radon_concs(&mut radon).expect("Inverse transform failure");
 
@@ -368,8 +367,6 @@ impl<P: Float + std::fmt::Debug> DetectorInverseModel<P> {
 
         // println!(" ===>>> {}, {}", exflow_scale, r_screen_scale);
 
-
-        
         // Place limits on parameters
         // (This should not be required, but...)
         assert!(lp.is_finite());
@@ -393,16 +390,13 @@ impl<P: Float + std::fmt::Debug> DetectorInverseModel<P> {
             exflow_scale = two;
         }
 
-
-        if !lp.is_finite(){
+        if !lp.is_finite() {
             dbg!(&lp);
             dbg!(&exflow_scale);
             dbg!(&r_screen_scale);
-
         }
 
         assert!(lp.is_finite());
-
 
         // Lognormal priors
         /*
@@ -421,42 +415,37 @@ impl<P: Float + std::fmt::Debug> DetectorInverseModel<P> {
         // Normal priors on parameters
         let r_screen_scale_mu = P::one();
         let r_screen_scale_sigma = P::from(self.inv_opts.r_screen_sigma).unwrap();
-        lprior =
-            lprior + normal_ln_pdf(r_screen_scale_mu, P::one(), r_screen_scale);
-        
-        let r_screen_scale = (r_screen_scale - P::one()) * r_screen_scale_sigma + P::one();
+        lprior = lprior + normal_ln_pdf(r_screen_scale_mu, P::one(), r_screen_scale);
 
+        let r_screen_scale = (r_screen_scale - P::one()) * r_screen_scale_sigma + P::one();
 
         let exflow_scale_mu = P::one();
         let exflow_sigma = P::from(self.inv_opts.exflow_sigma).unwrap();
         lprior = lprior + normal_ln_pdf(exflow_scale_mu, P::one(), exflow_scale);
 
         let exflow_scale = (exflow_scale - P::one()) * exflow_sigma + P::one();
-   
+
         // println!("{:?} {:?} {:?} {:?} || {:?} {:?} || {:?}", r_screen_scale_mu, r_screen_scale_sigma, exflow_scale_mu, exflow_sigma, r_screen_scale, exflow_scale, lprior);
 
         // Normal priors on the radon scale factor.  This is applied to keep this parameter
-        // in a numerically-stable range, and should be too weak to have an impact on the 
+        // in a numerically-stable range, and should be too weak to have an impact on the
         // result.  exp(10) = 22026; exp(100) = 2.688e43
         let ten = P::from(10.0).unwrap();
 
-        for u in radon_transformed{
+        for u in radon_transformed {
             lprior = lprior + normal_ln_pdf(P::zero(), ten, *u);
         }
 
         // for good measure, also clip this parameter to [-100, 100]
         let mut radon_transformed = radon_transformed.to_owned();
         let hundred = P::from(100.0).unwrap();
-        for u in radon_transformed.iter_mut(){
-            if *u > hundred{
+        for u in radon_transformed.iter_mut() {
+            if *u > hundred {
                 *u = hundred;
-
-            }
-            else if *u < -hundred{
+            } else if *u < -hundred {
                 *u = hundred;
             }
         }
-        
 
         // Calculate physical radon values
         // TODO: FIXME, this calculation could go elsewhere
@@ -476,7 +465,7 @@ impl<P: Float + std::fmt::Debug> DetectorInverseModel<P> {
                 x_t * radon_reference_value
             })
             .collect();
-        
+
         assert!(lprior.is_finite());
 
         lp = lp + lprior;
@@ -521,7 +510,7 @@ impl<P: Float + std::fmt::Debug> DetectorInverseModel<P> {
             //    return -P::from(f64::INFINITY).unwrap();
             //}
             let lp_inc = poisson_ln_pmf(*cex, P::from(*cobs).unwrap());
-            if !lp_inc.is_finite(){
+            if !lp_inc.is_finite() {
                 println!(" *** expected (from model) = {:?} observed = {:?} lp_increment = {:?} ln_prior = {:?} r_screen_scale = {:?} exflow_scale = {:?} radon = {:?}", *cex, *cobs, lp_inc, lprior, r_screen_scale, exflow_scale, radon);
             }
             assert!(lp_inc.is_finite());
@@ -588,8 +577,6 @@ impl CostFunction for CobylaDetectorInverseModel {
         Ok(vec![minus_lp])
     }
 }
-
-
 
 /// 'argmin' Gradient trait
 impl Gradient for DetectorInverseModel<FT<f64>> {
@@ -696,12 +683,21 @@ pub fn fit_inverse_model(
     // Scale by mean value and take log so that values take the range -inf,+inf
     // with most values around zero
     let mean_radon = initial_radon.iter().fold(0.0, |x, y| x + y) / (initial_radon.len() as f64);
-    let initial_radon_scaled: Vec<_> = initial_radon.iter().map(|x| (x/mean_radon).ln()).collect();
+    let initial_radon_scaled: Vec<_> = initial_radon
+        .iter()
+        .map(|x| (x / mean_radon).ln())
+        .collect();
 
     // Params, as differentiable type
     let p_diff = p.into_inner_type::<FT<f64>>();
-    let initial_radon_diff: Vec<_> = initial_radon.iter().map(|x| F::<f64, f64>::cst(*x)).collect();
-    let initial_radon_scaled_diff: Vec<_> = initial_radon_scaled.iter().map(|x| F::<f64, f64>::cst(*x)).collect();
+    let initial_radon_diff: Vec<_> = initial_radon
+        .iter()
+        .map(|x| F::<f64, f64>::cst(*x))
+        .collect();
+    let initial_radon_scaled_diff: Vec<_> = initial_radon_scaled
+        .iter()
+        .map(|x| F::<f64, f64>::cst(*x))
+        .collect();
 
     // 1. Initialisation
     // Define initial parameter vector and cost function
@@ -729,52 +725,52 @@ pub fn fit_inverse_model(
 
     // 2. Optimisation (MAP)
 
-/*
-    let linesearch = MoreThuenteLineSearch::new().with_bounds(1e-10, 0.005)?.with_width_tolerance(1e-3)?;
-
     /*
-    let linesearch = {
-        use argmin::solver::linesearch::condition::*;
-        let mut ls = BacktrackingLineSearch::new(ArmijoCondition::new(0.01f64).unwrap()).rho(0.5)?;
-        //let mut ls = BacktrackingLineSearch::new(WolfeCondition::new(0.0001f64, 0.1f64).unwrap()).rho(0.5)?;
-        //let mut ls = BacktrackingLineSearch::new(StrongWolfeCondition::new(0.0001f64, 0.1f64).unwrap()).rho(0.5)?;
-        ls.initial_step_length(0.01).unwrap();
-        ls
-    };
+        let linesearch = MoreThuenteLineSearch::new().with_bounds(1e-10, 0.005)?.with_width_tolerance(1e-3)?;
+
+        /*
+        let linesearch = {
+            use argmin::solver::linesearch::condition::*;
+            let mut ls = BacktrackingLineSearch::new(ArmijoCondition::new(0.01f64).unwrap()).rho(0.5)?;
+            //let mut ls = BacktrackingLineSearch::new(WolfeCondition::new(0.0001f64, 0.1f64).unwrap()).rho(0.5)?;
+            //let mut ls = BacktrackingLineSearch::new(StrongWolfeCondition::new(0.0001f64, 0.1f64).unwrap()).rho(0.5)?;
+            ls.initial_step_length(0.01).unwrap();
+            ls
+        };
+        */
+
+        //let solver = SteepestDescent::new(linesearch);
+        let solver = BFGS::new(linesearch)
+            .with_tolerance_cost(1e-2)?
+            .with_tolerance_grad(1e-1)?;
+
+        let init_hessian: Array2<f64> = Array2::eye(init_param.len());
+
+        // Run solver
+        let res = Executor::new(inverse_model, solver)
+            .configure(|state| {
+                state
+                    .param(init_param)
+                    .max_iters(1000)
+                    .inv_hessian(init_hessian)
+            })
+            .add_observer(SlogLogger::term(), ObserverMode::Every(1))
+            .run();
     */
-    
-    //let solver = SteepestDescent::new(linesearch);
-    let solver = BFGS::new(linesearch)
-        .with_tolerance_cost(1e-2)?
-        .with_tolerance_grad(1e-1)?;
-
-    let init_hessian: Array2<f64> = Array2::eye(init_param.len());
-
-    // Run solver
-    let res = Executor::new(inverse_model, solver)
-        .configure(|state| {
-            state
-                .param(init_param)
-                .max_iters(1000)
-                .inv_hessian(init_hessian)
-        })
-        .add_observer(SlogLogger::term(), ObserverMode::Every(1))
-        .run();
-*/
 
     // COBYLA solver version
     let mut cob_inverse_model = CobylaDetectorInverseModel(inverse_model.clone());
     let solver = CobylaSolver::new(init_param.as_slice().unwrap().to_owned());
     let res = Executor::new(cob_inverse_model, solver)
-            .configure(|state| {
-                let mut state = state.max_iters(50_000);
-                state.maxfun = 100_000;
-                state})
-            .add_observer(SlogLogger::term(), ObserverMode::Every(100))
-            .run();
+        .configure(|state| {
+            let mut state = state.max_iters(50_000);
+            state.maxfun = 100_000;
+            state
+        })
+        .add_observer(SlogLogger::term(), ObserverMode::Every(100))
+        .run();
 
-
-    if let Err(e) = &res{
+    if let Err(e) = &res {
         println!("Error: {e}");
     }
     let res = res.unwrap();
@@ -790,11 +786,11 @@ pub fn fit_inverse_model(
 
     let map_vec = map.clone().to_vec();
     let v = map_vec.as_slice();
-    let (transformed_r_screen_scale, transformed_exflow_scale, transformed_map_radon) = unpack_state_vector(&v, &inv_opts);
+    let (transformed_r_screen_scale, transformed_exflow_scale, transformed_map_radon) =
+        unpack_state_vector(&v, &inv_opts);
 
     let r_screen_scale = transformed_r_screen_scale.exp();
     let exflow_scale = transformed_exflow_scale.exp();
-
 
     println!("r_screen scale factor: {r_screen_scale}, exflow scale factor: {exflow_scale}");
 

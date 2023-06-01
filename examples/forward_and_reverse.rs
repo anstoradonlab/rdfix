@@ -32,7 +32,10 @@ fn main() -> Result<()> {
     }
 
     let p = DetectorParamsBuilder::<f64>::default().build()?;
-    let inv_opts = InversionOptionsBuilder::default().r_screen_sigma(1e-6).exflow_sigma(1e-6).build()?;
+    let inv_opts = InversionOptionsBuilder::default()
+        .r_screen_sigma(1e-6)
+        .exflow_sigma(1e-6)
+        .build()?;
 
     println!("Running inverse problem");
     let inv_results = fit_inverse_model(p, inv_opts, ts)?;
@@ -41,7 +44,7 @@ fn main() -> Result<()> {
     dbg!(soln1);
 
     for (x, y) in radon.iter().zip_eq(inv_results) {
-        println!("{x:.2}, {y:.2}, {:.2}", x/y);
+        println!("{x:.2}, {y:.2}, {:.2}", x / y);
     }
 
     Ok(())

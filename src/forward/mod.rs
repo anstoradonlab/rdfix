@@ -51,9 +51,8 @@ pub enum Parameter {
 
 /// Describe how the radon timeseries should be transformed
 /// before entering the MCMC samplers
-#[derive(Copy,Debug, Clone)]
-pub enum TransformationKind
-{
+#[derive(Copy, Debug, Clone)]
+pub enum TransformationKind {
     /// No transformation applied to radon timeseries
     None,
     /// Ensures that radon concentration is always positive
@@ -165,7 +164,7 @@ where
     pub sensitivity_points: Vec<P>,
     #[builder(default = "vec_as::<_, P>(&self.data.as_ref().unwrap().background_count_rate)")]
     pub background_count_rate_points: Vec<P>,
-    
+
     pub time_step: P,
     pub radon: Vec<P>,
     #[builder(default = "P::from(0.0).unwrap()")]
@@ -183,7 +182,6 @@ where
     #[builder(default = "60")]
     pub integration_substeps: usize,
 }
-
 
 /// interpolation utility functions
 fn linear_interpolation<P>(ti: P, y: &[P], tmax: P) -> P
