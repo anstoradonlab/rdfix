@@ -1,4 +1,5 @@
 use anyhow::Result;
+use itertools::Itertools;
 use rdfix::forward::{DetectorForwardModelBuilder, DetectorParamsBuilder};
 use rdfix::get_test_timeseries;
 use rdfix::inverse::{fit_inverse_model, InversionOptions, InversionOptionsBuilder};
@@ -9,7 +10,7 @@ fn main() -> Result<()> {
     let radon = {
         let mut v = vec![1.0_f64; npts];
         for x in v[5..20].iter_mut() {
-            *x = 2.0;
+            *x = 100.0;
         }
         v
     };
@@ -25,12 +26,13 @@ fn main() -> Result<()> {
 
     let soln1 = fwd.numerical_expected_counts()?;
     let simulated_counts: Vec<_> = soln1.iter().map(|x| x.round()).collect();
-    for (x, y) in ts.counts.iter_mut().zip(simulated_counts) {
+    // the first "simulated_counts" value is not used
+    for (x, y) in ts.counts.iter_mut().skip(1).zip_eq(simulated_counts) {
         *x = y;
     }
 
     let p = DetectorParamsBuilder::<f64>::default().build()?;
-    let inv_opts = InversionOptionsBuilder::default().build()?;
+    let inv_opts = InversionOptionsBuilder::default().r_screen_sigma(1e-3).exflow_sigma(1e-3).build()?;
 
     println!("Running inverse problem");
     let inv_results = fit_inverse_model(p, inv_opts, ts)?;
@@ -38,8 +40,8 @@ fn main() -> Result<()> {
     dbg!(&inv_results);
     dbg!(soln1);
 
-    for (x, y) in radon.iter().zip(inv_results) {
-        println!("{x}, {y}");
+    for (x, y) in radon.iter().zip_eq(inv_results) {
+        println!("{x:.2}, {y:.2}, {:.2}", x/y);
     }
 
     Ok(())

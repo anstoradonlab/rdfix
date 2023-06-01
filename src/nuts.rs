@@ -3,6 +3,7 @@ use autodiff::F1;
 use ndarray::{Array1, ArrayView1};
 use nuts_rs::{new_sampler, Chain, CpuLogpFunc, LogpError, SampleStats, SamplerArgs};
 use thiserror::Error;
+use anyhow::{bail, Context, Result, anyhow};
 
 use super::forward::{
     DetectorForwardModel, DetectorForwardModelBuilder, DetectorParams, DetectorParamsBuilder,
@@ -95,7 +96,7 @@ impl CpuLogpFunc for PosteriorDensity {
     }
 }
 
-fn test(npts: usize, depth: Option<u64>) {
+fn test(npts: usize, depth: Option<u64>) -> Result<()> {
     // We get the default sampler arguments
     let mut sampler_args = SamplerArgs::default();
 
@@ -107,8 +108,8 @@ fn test(npts: usize, depth: Option<u64>) {
     }
 
     // We instanciate our posterior density function
-    let p = DetectorParamsBuilder::default().build().unwrap();
-    let inv_opts = InversionOptionsBuilder::default().build().unwrap();
+    let p = DetectorParamsBuilder::default().build()?;
+    let inv_opts = InversionOptionsBuilder::default().build()?;
     let ts = get_test_timeseries(npts);
 
     let logp_func = PosteriorDensity::new(p, inv_opts, ts);
@@ -119,6 +120,7 @@ fn test(npts: usize, depth: Option<u64>) {
     let mut sampler = new_sampler(logp_func, sampler_args, chain, seed);
 
     // Set to some initial position and start drawing samples.
+    // Note: it's not possible to use ? here because the NUTS error isn't Sync
     sampler
         .set_position(&vec![0.0f64; dim])
         .expect("Unrecoverable error during init");
@@ -143,6 +145,7 @@ fn test(npts: usize, depth: Option<u64>) {
         trace.push(draw);
         stats.push(info);
     }
+    Ok(())
 }
 
 #[cfg(test)]

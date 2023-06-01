@@ -135,11 +135,13 @@ pub fn poisson_ln_pmf<P: Float>(lambda: P, x: P) -> P {
 /// Also see this:
 /// https://mc-stan.org/docs/reference-manual/change-of-variables.html
 pub fn exp_transform<P: Float>(u: P) -> (P, P) {
-    let maxu = (P::max_value()).ln();
-    let mut u = u;
-    if u > maxu {
-        u = maxu;
-    }
+
+    // protect against overflow
+    // let maxu = (P::max_value()).ln();
+    // let mut u = u;
+    // if u > maxu {
+    //     u = maxu;
+    // }
     // | d/du (exp(u)) | = exp(u)
     // log(|exp(u)|) = u
     (u.exp(), u)

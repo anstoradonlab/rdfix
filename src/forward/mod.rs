@@ -49,6 +49,24 @@ pub enum Parameter {
     TimeSeries(Vec<f64>),
 }
 
+/// Describe how the radon timeseries should be transformed
+/// before entering the MCMC samplers
+#[derive(Copy,Debug, Clone)]
+pub enum TransformationKind
+{
+    /// No transformation applied to radon timeseries
+    None,
+    /// Ensures that radon concentration is always positive
+    /// by mapping the raw parameter from `(-inf,+inf)` to
+    /// (0,inf)
+    EnforcePositive,
+    /// Apply a tranformation which weakens the correlation
+    /// between consecutive points in the radon timeseries
+    /// (details described in the paper).  This option also
+    /// ensures that radon concentrations must always be > 0
+    WeakCorrelation,
+}
+
 #[derive(Debug, Clone, Builder)]
 pub struct DetectorParams<P>
 where
@@ -453,6 +471,7 @@ where
             data: self.data.clone(),
             time_step: NP::from(self.time_step).unwrap(),
             radon: radon,
+            integration_substeps: 60,
             inj_source_strength: NP::from(self.inj_source_strength).unwrap(),
             inj_begin: NP::from(self.inj_begin).unwrap(),
             inj_duration: NP::from(self.inj_duration).unwrap(),
