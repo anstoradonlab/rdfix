@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
 
 use autodiff::{F1, FT};
 
@@ -77,6 +77,48 @@ fn objective_function(c: &mut Criterion) {
         b.iter(|| cost.lnprob_f64(init_param.clone().as_slice()))
     });
 }
+
+
+fn objective_function_func_npts(c: &mut Criterion) {
+    fn getinput(npts: usize) -> (DetectorInverseModel<f64>, Vec<f64>){
+        let p = DetectorParamsBuilder::default().build().unwrap();
+        let inv_opts = InversionOptionsBuilder::default().build().unwrap();
+        let ts = get_test_timeseries(npts);
+        let mut radon = vec![1.0; ts.len()];
+        // set this value to something higher so that gradients will be non-zero
+        radon[1] = 10.0;
+    
+        let time_step = 30.0 * 60.0;
+    
+        let fwd = DetectorForwardModelBuilder::default()
+            .data(ts.clone())
+            .time_step(time_step)
+            .radon(radon.clone())
+            .build()
+            .expect("Failed to build detector model");
+        let cost = DetectorInverseModel {
+            p: p.clone(),
+            inv_opts: inv_opts,
+            ts: ts.clone(),
+            fwd: fwd.clone(),
+        };
+    
+        let init_param = pack_state_vector(&radon[..], p.clone(), ts.clone(), inv_opts);
+        (cost, init_param)
+    }
+
+    let inputs: Vec<_> = (5..126).step_by(20).map(|n| getinput(n)).collect();
+    let mut group = c.benchmark_group("cost_for_npts");
+    for (cost, input) in inputs {
+        group.throughput(criterion::Throughput::Elements(input.len() as u64));
+        group.bench_with_input(BenchmarkId::from_parameter(input.len()), &input, |b, input| {
+            b.iter(|| cost.lnprob_f64(input.clone().as_slice()));
+        });
+    }
+    group.finish();
+
+}
+
 
 fn gradient_function(c: &mut Criterion) {
     let p = DetectorParamsBuilder::default()
@@ -158,6 +200,7 @@ criterion_group!(
     benches,
     objective_function,
     gradient_function,
-    objective_function_with_autodiff_types
+    objective_function_with_autodiff_types,
+    objective_function_func_npts
 );
 criterion_main!(benches);

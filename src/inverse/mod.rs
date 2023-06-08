@@ -666,7 +666,6 @@ pub fn calc_radon_without_deconvolution(ts: &InputTimeSeries, time_step: f64) ->
         .collect()
 }
 
-#[inline(always)]
 pub fn fit_inverse_model(
     // TODO: differentiable types for the first argument
     p: DetectorParams<f64>,
@@ -844,6 +843,10 @@ pub fn fit_inverse_model(
 
 
     ******************/
+
+
+
+
 
     Ok(map_radon)
 }

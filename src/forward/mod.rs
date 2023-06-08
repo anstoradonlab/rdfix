@@ -497,6 +497,7 @@ impl<P: Float + std::fmt::Debug> DetectorForwardModel<P> {
 /// Returns:
 ///   alpha detection efficiency (eff), recoil probability
 ///
+#[inline(always)]
 fn calc_eff_and_recoil_prob<P: Float + std::fmt::Debug>(
     q: P,
     rs: P,
@@ -517,6 +518,10 @@ fn calc_eff_and_recoil_prob<P: Float + std::fmt::Debug>(
     let rn_d2 = rn_d1 / (lamrn * v_delay_2 / q_external + P::from(1.0).unwrap());
     let rn = rn_d2 / (lamrn * v_tank / q_external + P::from(1.0).unwrap());
 
+    // TODO: this call takes about 20-30% of the total time spent evaluating the
+    // objective function in calculations of the inverse model.  Consider memorizing
+    // it, probably with the help of the generic_static crate
+    // Then, also do the same for gf::calc_na_nb_factors
     let ssc = gf::steady_state_count_rate(q, v_tank, eff, lamp, recoil_prob, rs) * rn / radon0;
     let eff = eff * total_efficiency / ssc;
     (eff, recoil_prob)
