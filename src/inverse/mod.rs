@@ -13,8 +13,12 @@ use argmin::solver::linesearch::condition::ArmijoCondition;
 use argmin::solver::linesearch::BacktrackingLineSearch;
 use argmin::solver::linesearch::HagerZhangLineSearch;
 use cobyla::CobylaSolver;
+use hammer_and_sample::auto_corr_time;
 use ndarray::Array1;
 use ndarray::Array2;
+use ndarray::Array3;
+use ndarray::Axis;
+use ndarray::s;
 use statrs::distribution::{Continuous, Discrete, LogNormal, Normal, Poisson};
 
 use derive_builder::Builder;
@@ -41,7 +45,7 @@ use argmin::core::observers::{ObserverMode, SlogLogger};
 
 use num::Float;
 
-use hammer_and_sample::{sample, Model, Serial};
+use hammer_and_sample::{sample, MinChainLen, Model, Parallel, Serial};
 use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg64;
 
@@ -49,6 +53,7 @@ use rand_pcg::Pcg64;
 
 use log::{debug, error, info, log_enabled};
 use statrs::function::logistic::{checked_logit, logistic, logit};
+use statrs::statistics::Statistics;
 
 use super::{InputTimeSeries, OutputTimeSeries};
 
@@ -61,6 +66,8 @@ use autodiff::*;
 
 // Link to the BLAS C library
 extern crate blas_src;
+
+pub const NUM_VARYING_PARAMETERS: usize = 2;
 
 // Transform a variable defined over [0,1] to a variable defined over [-inf, +inf]
 fn transform_constrained_to_unconstrained(x: f64) -> f64 {
@@ -320,7 +327,103 @@ where
 impl Model for DetectorInverseModel<f64> {
     type Params = Vec<f64>;
     fn log_prob(&self, state: &Self::Params) -> f64 {
-        todo!();
+        self.lnprob_f64(state.as_slice())
+    }
+}
+
+impl DetectorInverseModel<f64> {
+    pub fn emcee_sample(
+        &self,
+        num_samples: usize,
+        num_walkers: usize,
+        seed: usize,
+    ) -> Result<Vec<Vec<f64>>, anyhow::Error> {
+        let num_burn_in_samples = 100;
+
+        let dim = self.ts.len() + NUM_VARYING_PARAMETERS;
+
+        // Burn in samples
+        let walkers = ((0 + seed)..(num_walkers + seed)).map(|seed| {
+            let mut rng = Pcg64::seed_from_u64(seed.try_into().unwrap());
+
+            //let p = rng.gen_range(-1.0..=1.0);
+            let p = (0..dim).map(|_| rng.gen_range(-1.0..=1.0)).collect();
+
+            (p, rng)
+        });
+
+        println!("Burn in...");
+        let (burn_in_chain, _accepted) = sample(
+            self,
+            walkers,
+            MinChainLen(num_walkers * num_burn_in_samples),
+            Parallel,
+        );
+
+        // Samples
+        let walkers = (0..num_walkers).map(|ii_walker| {
+            let seed = ii_walker + seed + num_walkers;
+            let rng = Pcg64::seed_from_u64(seed.try_into().unwrap());
+
+            let p = (0..dim)
+                .map(|ii| burn_in_chain[burn_in_chain.len() - 1 - ii_walker][ii])
+                .collect();
+
+            (p, rng)
+        });
+
+        println!("Sampling...");
+        let (chain, accepted) = sample(
+            self,
+            walkers,
+            MinChainLen(num_walkers * num_samples),
+            Parallel,
+        );
+
+        let sampled = num_walkers * num_samples;
+        let acc_frac = accepted as f64 / sampled as f64;
+        println!("sampled: {sampled}, accepted: {accepted}, fraction = {acc_frac}");
+
+        // per-walker autocorrelation
+        println!("shape: {}, {}", chain.len(), chain[0].len());
+        println!("organising chains");
+        use rayon::prelude::*;
+
+        let mut samples = Array3::<f64>::zeros((dim, num_walkers, num_samples));
+        for ii in 0..num_samples {
+            for jj in 0..num_walkers {
+                let idx = ii * num_walkers + jj;
+                for kk in 0..dim {
+                    samples[[kk, jj, ii]] = chain[idx][kk]
+                }
+            }
+        }
+        
+        println!("Calculating autocorr");
+        let samples_slice = samples.slice(s![.., 0..3, ..]);
+        let autocorr= samples_slice.map_axis(Axis(2), |x| {
+                let y = auto_corr_time::<_>(x.iter().cloned(), None, Some(10));
+                y
+                // match y{
+                //     Some(z) => z,
+                //     None => {
+                //         panic!("None value when Some was expected");}
+                // }
+            }
+        );
+
+        dbg!(&autocorr.slice(s![.., 0]));
+
+        //let autocorr_mean = autocorr.mean_axis(Axis(0));
+
+        //dbg!(&autocorr_mean);
+
+        // 100 iterations of 10 walkers as burn-in
+        //let chain = &chain[num_walkers * num_burn_in_samples..];
+
+        //chain.iter().map(|&[p]| p).sum::<f64>() / chain.len() as f64;
+
+        Ok(chain)
     }
 }
 
@@ -522,15 +625,15 @@ impl<P: Float + std::fmt::Debug> DetectorInverseModel<P> {
     }
 
     /// Convert the inner type into NP and return a copy of DetectorInverseModel
-    fn into_inner_type<NP>(&self) -> Self
+    fn into_inner_type<NP>(&self) -> DetectorInverseModel<NP>
     where
         NP: Float + std::fmt::Debug,
     {
         let model = DetectorInverseModel {
-            p: todo!(),
-            inv_opts: todo!(),
-            ts: todo!(),
-            fwd: todo!(),
+            p: self.p.into_inner_type::<NP>(),
+            inv_opts: self.inv_opts.clone(),
+            ts: self.ts.clone(),
+            fwd: self.fwd.into_inner_type::<NP>(),
         };
         model
     }
@@ -762,7 +865,7 @@ pub fn fit_inverse_model(
     let solver = CobylaSolver::new(init_param.as_slice().unwrap().to_owned());
     let res = Executor::new(cob_inverse_model, solver)
         .configure(|state| {
-            let mut state = state.max_iters(50_000);
+            let mut state = state.max_iters(50); // set to 50_000
             state.maxfun = 100_000;
             state
         })
@@ -800,6 +903,24 @@ pub fn fit_inverse_model(
         .iter()
         .map(|x| x.exp() * mean_radon)
         .collect();
+
+    // NUTS samples
+
+    // use super::nuts::*;
+    // let samples = inverse_model.nuts_sample(2000, None)?;
+    // dbg!(samples);
+
+    // EMCEE samples
+    let inverse_model_f64 = inverse_model.into_inner_type::<f64>();
+    // num walkers -- ensure it's a multiple of 2
+    let num_walkers = {
+        let mut x = (npts + 2) * 3;
+        if x %2 != 0 {
+            x += 1;
+        }
+        x
+    };
+    let samples = inverse_model_f64.emcee_sample(40000, num_walkers, 42);
 
     // inverse_transform_radon_concs(&mut map_radon).unwrap();
 
@@ -843,10 +964,6 @@ pub fn fit_inverse_model(
 
 
     ******************/
-
-
-
-
 
     Ok(map_radon)
 }

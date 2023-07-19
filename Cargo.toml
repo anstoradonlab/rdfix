@@ -36,13 +36,15 @@ argmin = {version="0.8.0", default-features=false, features=["slog-logger"]}
 # argmin-math = { version = "0.3", features = ["ndarray_latest-serde", "nalgebra_latest-serde"] }
 argmin-math = { version = "0.3", features = ["ndarray_latest-serde"] }
 cobyla = "0.3.2"
-hammer-and-sample = "0.2"
+hammer-and-sample = {version = "0.2", features = ["rayon"]}
 rand = "0.8.5"
 rand_pcg = "0.3.1"
 arrayvec = "0.7.2"
 argmin_testfunctions = "0.1.1"
 nuts-rs = "0.4"
 thiserror = "1.0"
+rayon = "1.7.0"
+netcdf = { version = "0.8.1", features = ["ndarray"] }
 
 #finitediff = {version="0.1.4", features = ["ndarray"]}
 #ode_solvers = "0.3"

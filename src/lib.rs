@@ -1,5 +1,10 @@
 //! # This is a markdown title inside the file `lib.rs`
 
+pub mod forward;
+pub mod inverse;
+pub mod nuts;
+pub mod data;
+
 //use std::ops::{Add, Div, Mul, Sub};
 
 use serde::{Deserialize, Serialize};
@@ -170,9 +175,6 @@ pub fn read_csv<R: Read>(file: R) -> Result<InputTimeSeries, Box<dyn Error>> {
     Ok(data)
 }
 
-pub mod forward;
-pub mod inverse;
-pub mod nuts;
 
 #[cfg(test)]
 mod tests {

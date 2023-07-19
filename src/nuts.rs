@@ -2,8 +2,11 @@ use anyhow::{anyhow, bail, Context, Result};
 use argmin::core::Gradient;
 use autodiff::F1;
 use ndarray::{Array1, ArrayView1};
-use nuts_rs::{new_sampler, Chain, CpuLogpFunc, LogpError, SampleStats, SamplerArgs};
+use num::Float;
+pub use nuts_rs::{new_sampler, Chain, CpuLogpFunc, LogpError, SampleStats, SamplerArgs};
 use thiserror::Error;
+
+use crate::forward::constants::{NUM_PARAMETERS, NUM_STATE_VARIABLES};
 
 use super::forward::{
     DetectorForwardModel, DetectorForwardModelBuilder, DetectorParams, DetectorParamsBuilder,
@@ -70,7 +73,7 @@ impl PosteriorDensity {
 
 // The density might fail in a recoverable or non-recoverable manner...
 #[derive(Debug, Error)]
-enum PosteriorLogpError {}
+pub enum PosteriorLogpError {}
 impl LogpError for PosteriorLogpError {
     fn is_recoverable(&self) -> bool {
         false
@@ -93,6 +96,79 @@ impl CpuLogpFunc for PosteriorDensity {
             *g_out = g;
         }
         return Ok(logp);
+    }
+}
+
+
+
+impl CpuLogpFunc for DetectorInverseModel<F1> {
+    type Err = PosteriorLogpError;
+
+    fn dim(&self) -> usize {
+        self.ts.len() + NUM_VARYING_PARAMETERS
+    }
+
+    fn logp(&mut self, position: &[f64], grad: &mut [f64]) -> Result<f64, Self::Err> {
+        let logp = self.lnprob_f64(position);
+        let pos = ArrayView1::from(position).into_owned();
+        let gradient = self.gradient(&pos).unwrap();
+
+        for (g_out, g) in grad.iter_mut().zip(gradient) {
+            *g_out = g;
+        }
+        return Ok(logp);
+    }
+}
+
+
+
+impl DetectorInverseModel<F1> {
+    pub fn nuts_sample(&self, npts: usize, depth: Option<u64>) -> Result<(), anyhow::Error> {
+        // We get the default sampler arguments
+        let mut sampler_args = SamplerArgs::default();
+
+        // and modify as we like
+        sampler_args.num_tune = 1000;
+        // maxdepth makes an enormous difference to runtime
+        if let Some(maxdepth) = depth {
+            sampler_args.maxdepth = maxdepth; // use a small value, e.g. 3 for testing...
+        }
+
+
+        let logp_func = self.clone();
+        let dim = logp_func.dim();
+
+        let chain = 0;
+        let seed = 42;
+        let mut sampler = new_sampler(logp_func, sampler_args, chain, seed);
+
+        // Set to some initial position and start drawing samples.
+        // Note: it's not possible to use ? here because the NUTS error isn't Sync
+        sampler
+            .set_position(&vec![0.0f64; dim])
+            .expect("Unrecoverable error during init");
+        let mut trace = vec![]; // Collection of all draws
+        let mut stats = vec![]; // Collection of statistics like the acceptance rate for each draw
+        for iter in (0..2000).progress() {
+            let (draw, info) = sampler.draw().expect("Unrecoverable error during sampling");
+
+            let _info_vec = info.to_vec(); // We can collect the stats in a Vec
+                                           // Or get more detailed information about divergences
+            if let Some(div_info) = info.divergence_info() {
+                println!(
+                    "Divergence on iteration {:?} at position {:?}",
+                    iter,
+                    div_info.start_location()
+                );
+            }
+            if iter % 100 == 0 {
+                dbg!(&draw);
+                dbg!(&info);
+            }
+            trace.push(draw);
+            stats.push(info);
+        }
+        Ok(())
     }
 }
 
