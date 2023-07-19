@@ -7,7 +7,10 @@ pub mod data;
 
 //use std::ops::{Add, Div, Mul, Sub};
 
+use data::{DataSet, GridVariable};
+use ndarray::{Array1, ArrayView1};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::error::Error;
 use std::io::{Read, Write};
 
@@ -127,6 +130,63 @@ impl InputTimeSeries{
     }
 }
 */
+
+impl InputRecordVec{
+    pub fn to_grid_vars(&self) -> Vec<GridVariable>{
+        let mut data = vec![];
+        let v = GridVariable::new_from_parts(
+            ArrayView1::from(&self.time).into_owned().into_dyn(), 
+            "time", 
+            &["time"],
+            Some(HashMap::from([("units".to_owned(), "seconds".to_owned())])));
+        data.push(v);
+
+        let v = GridVariable::new_from_parts(
+            ArrayView1::from(&self.counts).into_owned().into_dyn(), 
+            "counts", 
+            &["time"],
+            Some(HashMap::from([("units".to_owned(), "Counts over the interval, `(t-dt, t)`".to_owned())])));
+        data.push(v);
+
+        let v = GridVariable::new_from_parts(
+            ArrayView1::from(&self.background_count_rate).into_owned().into_dyn(), 
+            "background_count_rate", 
+            &["time"],
+            Some(HashMap::from([("units".to_owned(), "second^(-1)".to_owned())])));
+        data.push(v);
+
+        let v = GridVariable::new_from_parts(
+            ArrayView1::from(&self.sensitivity).into_owned().into_dyn(), 
+            "sensitivity", 
+            &["time"],
+            Some(HashMap::from([("units".to_owned(), "(detector cps) / (ambient Bq/m3)".to_owned())])));
+        data.push(v);
+
+        let v = GridVariable::new_from_parts(
+            ArrayView1::from(&self.q_internal).into_owned().into_dyn(), 
+            "q_internal", 
+            &["time"],
+            Some(HashMap::from([("units".to_owned(), "volumetric, m3/sec".to_owned())])));
+        data.push(v);
+
+        let v = GridVariable::new_from_parts(
+            ArrayView1::from(&self.q_external).into_owned().into_dyn(), 
+            "q_external", 
+            &["time"],
+            Some(HashMap::from([("units".to_owned(), "volumetric, m3/sec".to_owned())])));
+        data.push(v);
+
+        let v = GridVariable::new_from_parts(
+            ArrayView1::from(&self.airt).into_owned().into_dyn(), 
+            "airt", 
+            &["time"],
+            Some(HashMap::from([("units".to_owned(), "deg C".to_owned())])));
+        data.push(v);
+
+        //DataSet::new_from_variables(data)
+        data
+    }
+}
 
 pub fn get_test_timeseries(npts: usize) -> InputRecordVec {
     let trec = InputRecord {

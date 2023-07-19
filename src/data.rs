@@ -80,8 +80,14 @@ impl DataSet {
 
     pub fn to_netcdf(&self, f: PathBuf) -> Result<()> {
         let mut file = netcdf::create(&f)?;
+        // -- classic mode doesn't seem to work
+        //let mut file = netcdf::create_with(&f, netcdf::Options::CLASSIC)?;
         for (dim_name, dim_len) in self.all_dimensions() {
-            file.add_dimension(&dim_name, dim_len)?;
+            if &dim_name == "time" {
+                file.add_unlimited_dimension(&dim_name)?;
+            } else {
+                file.add_dimension(&dim_name, dim_len)?;
+            }
         }
         for v in self.vars.iter() {
             let dim_names: Vec<&str> = v.dimensions.iter().map(String::as_str).collect();

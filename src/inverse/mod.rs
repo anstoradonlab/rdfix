@@ -863,7 +863,7 @@ pub fn fit_inverse_model(
     let inverse_model: DetectorInverseModel<F<f64, f64>> = DetectorInverseModel {
         p: p_diff,
         inv_opts: inv_opts,
-        ts: ts,
+        ts: ts.clone(),
         fwd: fwd,
     };
 
@@ -1017,6 +1017,7 @@ pub fn fit_inverse_model(
     ));
 
     data.extend(sampler_output);
+    data.extend(ts.to_grid_vars());
 
     let ds = DataSet::new_from_variables(data);
     Ok(ds)
