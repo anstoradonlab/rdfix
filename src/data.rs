@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use ndarray::prelude::*;
+use plotlib::grid::Grid;
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -13,12 +14,12 @@ enum Dim {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct GridVariable {
-    name: String,
-    dimensions: Vec<String>,
+    pub name: String,
+    pub dimensions: Vec<String>,
     //dimensions: HashMap<String, Dim>,
     //coordinates: HashMap<String, Vec<f64>>,
-    data: Array<f64, IxDyn>,
-    attr: HashMap<String, String>,
+    pub data: Array<f64, IxDyn>,
+    pub attr: HashMap<String, String>,
 }
 
 impl GridVariable {
@@ -63,6 +64,15 @@ impl DataSet {
 
         // todo!();
         DataSet { vars }
+    }
+
+    pub fn var_ref(&self, vname: &str) -> Option<&GridVariable>{
+        for v in self.vars.iter(){
+            if v.name == vname{
+                return Some(v);
+            }
+        }
+        None
     }
 
     pub fn all_dimensions(&self) -> Vec<(String, usize)> {
@@ -141,8 +151,11 @@ mod tests {
 
     #[test]
     fn can_create_netcdf() {
-        let fname = Path::new(".").join("test.nc");
+        use tempfile::tempdir;
+        let dir = tempdir().unwrap();
+        let fname = dir.path().join("test.nc");
         let ds = create_ds();
         ds.to_netcdf(fname).unwrap();
+        dir.close().unwrap();
     }
 }

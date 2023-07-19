@@ -54,7 +54,7 @@ fn main() -> Result<()> {
 
     let p = DetectorParamsBuilder::default().build().unwrap();
     let inv_opts = InversionOptionsBuilder::default().build().unwrap();
-    let npts = 40;
+    let npts = 48;
     let mut ts = get_test_timeseries(npts);
     ts.counts[npts - 1] += 500.0;
 
