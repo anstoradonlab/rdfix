@@ -1,3 +1,5 @@
+use anyhow::Result;
+
 use autodiff::{F1, FT};
 
 use rdfix::forward::{DetectorForwardModelBuilder, DetectorParamsBuilder};
@@ -16,7 +18,7 @@ use rdfix::{InputRecord, InputTimeSeries};
 
 use log::{debug, error, info, log_enabled, Level};
 
-fn main() {
+fn main() -> Result<()> {
     env_logger::init();
     error!("Here's an error message for tesing purposes");
 
@@ -56,6 +58,8 @@ fn main() {
     let mut ts = get_test_timeseries(npts);
     ts.counts[npts - 1] += 500.0;
 
-    fit_inverse_model(p.clone(), inv_opts.clone(), ts.clone())
-        .expect("Failed to fit inverse model");
+    let fit_results = fit_inverse_model(p.clone(), inv_opts.clone(), ts.clone())?;
+    fit_results.to_netcdf("test_results_todo.nc".into())?;
+
+    Ok(())
 }

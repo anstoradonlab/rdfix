@@ -1,5 +1,10 @@
 mod generic_primitives;
 
+use std::collections::HashMap;
+
+use crate::data;
+use crate::data::DataSet;
+use crate::data::GridVariable;
 use crate::inverse;
 use crate::inverse::generic_primitives::exp_transform;
 
@@ -14,11 +19,13 @@ use argmin::solver::linesearch::BacktrackingLineSearch;
 use argmin::solver::linesearch::HagerZhangLineSearch;
 use cobyla::CobylaSolver;
 use hammer_and_sample::auto_corr_time;
+use ndarray::Array;
+use ndarray::s;
 use ndarray::Array1;
 use ndarray::Array2;
 use ndarray::Array3;
+use ndarray::ArrayD;
 use ndarray::Axis;
-use ndarray::s;
 use statrs::distribution::{Continuous, Discrete, LogNormal, Normal, Poisson};
 
 use derive_builder::Builder;
@@ -337,7 +344,7 @@ impl DetectorInverseModel<f64> {
         num_samples: usize,
         num_walkers: usize,
         seed: usize,
-    ) -> Result<Vec<Vec<f64>>, anyhow::Error> {
+    ) -> Result<Vec<GridVariable>, anyhow::Error> {
         let num_burn_in_samples = 100;
 
         let dim = self.ts.len() + NUM_VARYING_PARAMETERS;
@@ -398,19 +405,18 @@ impl DetectorInverseModel<f64> {
                 }
             }
         }
-        
+
         println!("Calculating autocorr");
         let samples_slice = samples.slice(s![.., 0..3, ..]);
-        let autocorr= samples_slice.map_axis(Axis(2), |x| {
-                let y = auto_corr_time::<_>(x.iter().cloned(), None, Some(10));
-                y
-                // match y{
-                //     Some(z) => z,
-                //     None => {
-                //         panic!("None value when Some was expected");}
-                // }
-            }
-        );
+        let autocorr = samples_slice.map_axis(Axis(2), |x| {
+            let y = auto_corr_time::<_>(x.iter().cloned(), None, Some(10));
+            y
+            // match y{
+            //     Some(z) => z,
+            //     None => {
+            //         panic!("None value when Some was expected");}
+            // }
+        });
 
         dbg!(&autocorr.slice(s![.., 0]));
 
@@ -423,7 +429,44 @@ impl DetectorInverseModel<f64> {
 
         //chain.iter().map(|&[p]| p).sum::<f64>() / chain.len() as f64;
 
-        Ok(chain)
+        let r_screen_scale_samples = samples.slice(s![0, .., ..]);
+        let exflow_scale_samples = samples.slice(s![1, .., ..]);
+        let radon_samples = samples.slice(s![2.., .., ..]);
+
+        // Convert to variables with metadata
+        let r_screen_scale_samples =  GridVariable::new_from_parts(
+            r_screen_scale_samples.into_dyn().into_owned(),
+            "r_screen_scale",
+            &["walker", "sample"],
+            None,
+        );
+        let exflow_scale_samples =  GridVariable::new_from_parts(
+            exflow_scale_samples.into_dyn().into_owned(),
+            "exflow_scale",
+            &["walker", "sample"],
+            None,
+        );
+
+        let radon_samples = GridVariable::new_from_parts(
+            radon_samples.into_dyn().into_owned(),
+            "radon",
+            &["time", "walker", "sample"],
+            None,
+        );
+
+        // TODO: fix timestep
+        let time_step = 30.0*60.0;
+        let model_time = Array1::range(0.0,self.ts.len() as f64, 1.0) * time_step;
+        let model_time = GridVariable::new_from_parts(
+            model_time.into_dyn().into_owned(),
+            "model_time",
+            &["time"],
+            Some(HashMap::from([("units".to_owned(), "seconds".to_owned())]))
+        );
+
+        let data = vec![model_time, r_screen_scale_samples, exflow_scale_samples, radon_samples];
+
+        Ok(data)
     }
 }
 
@@ -770,11 +813,10 @@ pub fn calc_radon_without_deconvolution(ts: &InputTimeSeries, time_step: f64) ->
 }
 
 pub fn fit_inverse_model(
-    // TODO: differentiable types for the first argument
     p: DetectorParams<f64>,
     inv_opts: InversionOptions,
     ts: InputTimeSeries,
-) -> Result<Vec<f64>, Error> {
+) -> Result<DataSet> {
     let npts = ts.len();
     let time_step = 60.0 * 30.0; //TODO
     let time_step_diff = FT::<f64>::cst(time_step);
@@ -915,12 +957,12 @@ pub fn fit_inverse_model(
     // num walkers -- ensure it's a multiple of 2
     let num_walkers = {
         let mut x = (npts + 2) * 3;
-        if x %2 != 0 {
+        if x % 2 != 0 {
             x += 1;
         }
         x
     };
-    let samples = inverse_model_f64.emcee_sample(40000, num_walkers, 42);
+    let sampler_output = inverse_model_f64.emcee_sample(1000, num_walkers, 42)?;
 
     // inverse_transform_radon_concs(&mut map_radon).unwrap();
 
@@ -965,7 +1007,19 @@ pub fn fit_inverse_model(
 
     ******************/
 
-    Ok(map_radon)
+    let mut data: Vec<GridVariable> = vec![];
+
+    data.push(GridVariable::new_from_parts(
+        ArrayD::from_shape_vec(vec![map_radon.len()], map_radon)?,
+        "map_radon",
+        &["time"],
+        None,
+    ));
+
+    data.extend(sampler_output);
+
+    let ds = DataSet::new_from_variables(data);
+    Ok(ds)
 }
 
 #[cfg(test)]
