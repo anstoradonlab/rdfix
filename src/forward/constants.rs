@@ -1,3 +1,6 @@
+use chrono::prelude::*;
+use lazy_static::lazy_static;
+
 // constants (despite appearances, only correct to about 2 dec places but
 //            written like this to match the python version)
 pub const LAMRN: f64 = 2.1001405267111005e-06;
@@ -18,3 +21,11 @@ pub const IDX_ACC_COUNTS: usize = 6;
 
 // model parameters
 pub const NUM_PARAMETERS: usize = 16;
+
+
+lazy_static! {
+    /// reference time for internal time units
+    pub static ref REFERENCE_TIME: NaiveDateTime = NaiveDate::from_ymd_opt(2000, 1, 1).unwrap().and_hms_opt(0, 0, 0).unwrap();
+}
+/// time units to use in netCDF output
+pub const TIME_UNITS: &str = "seconds since 2000-01-01 00:00:00.0";

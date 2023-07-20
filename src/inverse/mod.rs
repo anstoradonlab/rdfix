@@ -907,7 +907,7 @@ pub fn fit_inverse_model(
     let solver = CobylaSolver::new(init_param.as_slice().unwrap().to_owned());
     let res = Executor::new(cob_inverse_model, solver)
         .configure(|state| {
-            let mut state = state.max_iters(50); // set to 50_000
+            let mut state = state.max_iters(5000); // set to 50_000
             state.maxfun = 100_000;
             state
         })

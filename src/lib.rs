@@ -1,13 +1,15 @@
 //! # This is a markdown title inside the file `lib.rs`
 
+pub mod data;
 pub mod forward;
 pub mod inverse;
 pub mod nuts;
-pub mod data;
 
 //use std::ops::{Add, Div, Mul, Sub};
 
+use chrono::{prelude::*, Duration};
 use data::{DataSet, GridVariable};
+use forward::constants::{REFERENCE_TIME, TIME_UNITS};
 use ndarray::{Array1, ArrayView1};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -18,7 +20,7 @@ use std::io::{Read, Write};
 extern crate soa_derive;
 
 #[derive(Debug, Clone, PartialEq, Copy, StructOfArray, Default, Serialize, Deserialize)]
-#[soa_derive(Clone, Debug, Serialize, Deserialize)]
+#[soa_derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct InputRecord {
     /// Time measured in seconds since an arbitrary reference
     pub time: f64,
@@ -35,6 +37,99 @@ pub struct InputRecord {
     pub q_external: f64,
     /// Air temperature inside detector, degrees C
     pub airt: f64,
+}
+
+/// A version of the InputRecord which can be used for IO - this
+/// one knows about dates
+#[derive(Debug, Clone, PartialEq, Copy, Default, Serialize, Deserialize)]
+struct IoInputRecord {
+    #[serde(with = "custom_date_format")]
+    pub time: NaiveDateTime,
+    pub counts: f64,
+    pub background_count_rate: f64,
+    pub sensitivity: f64,
+    pub q_internal: f64,
+    pub q_external: f64,
+    pub airt: f64,
+}
+
+// copy-paste from docs, https://serde.rs/custom-date-format.html, switching to NaiveDateTime objects
+mod custom_date_format {
+    use chrono::NaiveDateTime;
+    use serde::{self, Deserialize, Deserializer, Serializer};
+
+    const FORMAT1: &'static str = "%Y-%m-%d %H:%M:%S";
+    const FORMAT2: &'static str = "%Y-%m-%dT%H:%M:%S";
+    const FORMAT3: &'static str = "%Y-%m-%d %H:%M:%S%.f";
+    const FORMAT4: &'static str = "%Y-%m-%dT%H:%M:%S%.f";
+
+    // The signature of a serialize_with function must follow the pattern:
+    //
+    //    fn serialize<S>(&T, S) -> Result<S::Ok, S::Error>
+    //    where
+    //        S: Serializer
+    //
+    // although it may also be generic over the input types T.
+    pub fn serialize<S>(date: &NaiveDateTime, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let s = format!("{}", date.format(FORMAT1));
+        serializer.serialize_str(&s)
+    }
+
+    // The signature of a deserialize_with function must follow the pattern:
+    //
+    //    fn deserialize<'de, D>(D) -> Result<T, D::Error>
+    //    where
+    //        D: Deserializer<'de>
+    //
+    // although it may also be generic over the output types T.
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<NaiveDateTime, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        NaiveDateTime::parse_from_str(&s, FORMAT1)
+            .or_else(|_| NaiveDateTime::parse_from_str(&s, FORMAT2))
+            .or_else(|_| NaiveDateTime::parse_from_str(&s, FORMAT3))
+            .or_else(|_| NaiveDateTime::parse_from_str(&s, FORMAT4))
+            .map_err(serde::de::Error::custom)
+    }
+}
+
+impl From<IoInputRecord> for InputRecord {
+    fn from(itm: IoInputRecord) -> Self {
+        // TODO: calculate properly
+        let time = (itm.time - *REFERENCE_TIME).num_seconds() as f64;
+        InputRecord {
+            time: time,
+            counts: itm.counts,
+            background_count_rate: itm.background_count_rate,
+            sensitivity: itm.sensitivity,
+            q_internal: itm.q_internal,
+            q_external: itm.q_external,
+            airt: itm.airt,
+        }
+    }
+}
+
+impl From<InputRecord> for IoInputRecord {
+    fn from(itm: InputRecord) -> Self {
+        // TODO: calculate properly
+        let secs = Duration::seconds(itm.time.round() as i64);
+        let nanosecs = Duration::nanoseconds(((itm.time - itm.time.round()) * 1e9) as i64);
+        let time: NaiveDateTime = *REFERENCE_TIME + secs + nanosecs;
+        IoInputRecord {
+            time: time,
+            counts: itm.counts,
+            background_count_rate: itm.background_count_rate,
+            sensitivity: itm.sensitivity,
+            q_internal: itm.q_internal,
+            q_external: itm.q_external,
+            airt: itm.airt,
+        }
+    }
 }
 
 /*
@@ -131,56 +226,80 @@ impl InputTimeSeries{
 }
 */
 
-impl InputRecordVec{
-    pub fn to_grid_vars(&self) -> Vec<GridVariable>{
+impl InputRecordVec {
+    pub fn to_grid_vars(&self) -> Vec<GridVariable> {
         let mut data = vec![];
         let v = GridVariable::new_from_parts(
-            ArrayView1::from(&self.time).into_owned().into_dyn(), 
-            "time", 
+            ArrayView1::from(&self.time).into_owned().into_dyn(),
+            "time",
             &["time"],
-            Some(HashMap::from([("units".to_owned(), "seconds".to_owned())])));
+            Some(HashMap::from([("units".to_owned(), TIME_UNITS.to_owned())])),
+        );
         data.push(v);
 
         let v = GridVariable::new_from_parts(
-            ArrayView1::from(&self.counts).into_owned().into_dyn(), 
-            "counts", 
+            ArrayView1::from(&self.counts).into_owned().into_dyn(),
+            "counts",
             &["time"],
-            Some(HashMap::from([("units".to_owned(), "Counts over the interval, `(t-dt, t)`".to_owned())])));
+            Some(HashMap::from([(
+                "units".to_owned(),
+                "Counts over the interval, `(t-dt, t)`".to_owned(),
+            )])),
+        );
         data.push(v);
 
         let v = GridVariable::new_from_parts(
-            ArrayView1::from(&self.background_count_rate).into_owned().into_dyn(), 
-            "background_count_rate", 
+            ArrayView1::from(&self.background_count_rate)
+                .into_owned()
+                .into_dyn(),
+            "background_count_rate",
             &["time"],
-            Some(HashMap::from([("units".to_owned(), "second^(-1)".to_owned())])));
+            Some(HashMap::from([(
+                "units".to_owned(),
+                "second^(-1)".to_owned(),
+            )])),
+        );
         data.push(v);
 
         let v = GridVariable::new_from_parts(
-            ArrayView1::from(&self.sensitivity).into_owned().into_dyn(), 
-            "sensitivity", 
+            ArrayView1::from(&self.sensitivity).into_owned().into_dyn(),
+            "sensitivity",
             &["time"],
-            Some(HashMap::from([("units".to_owned(), "(detector cps) / (ambient Bq/m3)".to_owned())])));
+            Some(HashMap::from([(
+                "units".to_owned(),
+                "(detector cps) / (ambient Bq/m3)".to_owned(),
+            )])),
+        );
         data.push(v);
 
         let v = GridVariable::new_from_parts(
-            ArrayView1::from(&self.q_internal).into_owned().into_dyn(), 
-            "q_internal", 
+            ArrayView1::from(&self.q_internal).into_owned().into_dyn(),
+            "q_internal",
             &["time"],
-            Some(HashMap::from([("units".to_owned(), "volumetric, m3/sec".to_owned())])));
+            Some(HashMap::from([(
+                "units".to_owned(),
+                "volumetric, m3/sec".to_owned(),
+            )])),
+        );
         data.push(v);
 
         let v = GridVariable::new_from_parts(
-            ArrayView1::from(&self.q_external).into_owned().into_dyn(), 
-            "q_external", 
+            ArrayView1::from(&self.q_external).into_owned().into_dyn(),
+            "q_external",
             &["time"],
-            Some(HashMap::from([("units".to_owned(), "volumetric, m3/sec".to_owned())])));
+            Some(HashMap::from([(
+                "units".to_owned(),
+                "volumetric, m3/sec".to_owned(),
+            )])),
+        );
         data.push(v);
 
         let v = GridVariable::new_from_parts(
-            ArrayView1::from(&self.airt).into_owned().into_dyn(), 
-            "airt", 
+            ArrayView1::from(&self.airt).into_owned().into_dyn(),
+            "airt",
             &["time"],
-            Some(HashMap::from([("units".to_owned(), "deg C".to_owned())])));
+            Some(HashMap::from([("units".to_owned(), "deg C".to_owned())])),
+        );
         data.push(v);
 
         //DataSet::new_from_variables(data)
@@ -216,7 +335,8 @@ pub fn get_test_timeseries(npts: usize) -> InputRecordVec {
 pub fn write_csv<W: Write>(file: &mut W, records: InputTimeSeries) -> Result<(), Box<dyn Error>> {
     let mut wtr = csv::Writer::from_writer(file);
     for row in &records {
-        wtr.serialize(row.to_owned())?;
+        let row: IoInputRecord = row.to_owned().into();
+        wtr.serialize(row)?;
     }
     wtr.flush()?;
     Ok(())
@@ -228,13 +348,13 @@ pub fn read_csv<R: Read>(file: R) -> Result<InputTimeSeries, Box<dyn Error>> {
     for result in rdr.deserialize() {
         // Notice that we need to provide a type hint for automatic
         // deserialization.
-        let row: InputRecord = result?;
+        let row: IoInputRecord = result?;
+        let row: InputRecord = row.into();
         println!("{:?}", row);
         data.push(row);
     }
     Ok(data)
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -258,19 +378,31 @@ mod tests {
     }
     #[test]
     fn csv() {
-        let ts = get_test_timeseries(2);
+        let ts = get_test_timeseries(4);
         let mut outfile = Vec::new();
         write_csv(&mut outfile, ts).unwrap();
         let s = String::from_utf8(outfile.clone()).unwrap();
         let expected = "time,counts,background_count_rate,sensitivity,q_internal,q_external,airt\n\
-        0.0,1030.0,0.016666666666666666,0.5555555555555556,0.0016666666666666668,0.0013333333333333333,21.0\n\
-        1800.0,1030.0,0.016666666666666666,0.5555555555555556,0.0016666666666666668,0.0013333333333333333,21.0\n";
+        2000-01-01 00:00:00,1030.0,0.016666666666666666,0.5555555555555556,0.0016666666666666668,0.0013333333333333333,21.0\n\
+        2000-01-01 00:30:00,1030.0,0.016666666666666666,0.5555555555555556,0.0016666666666666668,0.0013333333333333333,21.0\n\
+        2000-01-01 01:00:00,1030.0,0.016666666666666666,0.5555555555555556,0.0016666666666666668,0.0013333333333333333,21.0\n\
+        2000-01-01 01:30:00,1030.0,0.016666666666666666,0.5555555555555556,0.0016666666666666668,0.0013333333333333333,21.0\n";
         assert_eq!(s, expected);
         dbg!(&s);
         println!("{}", s);
 
+        // Happy to read from both "T-delemited" and space delimited date strings, with/without decimal seconds
+        let csvdata = "time,counts,background_count_rate,sensitivity,q_internal,q_external,airt\n\
+        2000-01-01 00:00:00,1030.0,0.016666666666666666,0.5555555555555556,0.0016666666666666668,0.0013333333333333333,21.0\n\
+        2000-01-01T00:30:00,1030.0,0.016666666666666666,0.5555555555555556,0.0016666666666666668,0.0013333333333333333,21.0\n\
+        2000-01-01 01:00:00.00,1030.0,0.016666666666666666,0.5555555555555556,0.0016666666666666668,0.0013333333333333333,21.0\n\
+        2000-01-01T01:30:00.00,1030.0,0.016666666666666666,0.5555555555555556,0.0016666666666666668,0.0013333333333333333,21.0\n";
+        let parsed_data = read_csv(csvdata.as_bytes()).unwrap();
+
         //let t = outfile.as_slice();
         let data = read_csv(outfile.as_slice()).unwrap();
         dbg!(&data);
+
+        assert_eq!(&data, &parsed_data);
     }
 }
