@@ -7,6 +7,7 @@ use rdfix::get_test_timeseries;
 use rdfix::inverse::{
     fit_inverse_model, pack_state_vector, DetectorInverseModel, Gradient, InversionOptionsBuilder,
 };
+use rdfix::cmdline::{*};
 
 /* MAKEITWORK
 use rdfix::inverse::{
@@ -21,6 +22,9 @@ use log::{debug, error, info, log_enabled, Level};
 fn main() -> Result<()> {
     env_logger::init();
     error!("Here's an error message for tesing purposes");
+
+    let args = parse_cmdline();
+    dbg!(&args);
 
     let p = DetectorParamsBuilder::<f64>::default().build().unwrap();
     println!("parameters, f64: {:#?}", p);

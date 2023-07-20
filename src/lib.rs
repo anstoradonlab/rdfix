@@ -4,6 +4,7 @@ pub mod data;
 pub mod forward;
 pub mod inverse;
 pub mod nuts;
+pub mod cmdline;
 
 //use std::ops::{Add, Div, Mul, Sub};
 
