@@ -46,24 +46,6 @@ fn create_template(cmd_args: &TemplateArgs) -> Result<()> {
 }
 
 fn run_deconvolution(_cmd_args: &DeconvArgs) -> Result<()> {
-    todo!();
-}
-
-fn main() -> Result<()> {
-    env_logger::init();
-    error!("Here's an error message for testing purposes");
-
-    let program_args = parse_cmdline()?;
-
-    match &program_args.command {
-        Some(Commands::Template(cmd_args)) => {
-            create_template(&cmd_args)?;
-        }
-        Some(Commands::Deconv(cmd_args)) => run_deconvolution(&cmd_args)?,
-        None => unreachable!(),
-    }
-    dbg!(&program_args);
-
     let p = DetectorParamsBuilder::<f64>::default().build().unwrap();
     println!("parameters, f64: {:#?}", p);
 
@@ -103,5 +85,25 @@ fn main() -> Result<()> {
     let fit_results = fit_inverse_model(p.clone(), inv_opts.clone(), ts.clone())?;
     fit_results.to_netcdf("test_results_todo.nc".into())?;
 
+    Ok(())
+}
+
+fn main_body(program_args: RdfixArgs) -> Result<()> {
+    env_logger::init();
+    error!("Here's an error message for testing purposes");
+
+    match &program_args.command {
+        Commands::Template(cmd_args) => {
+            create_template(&cmd_args)?;
+        }
+        Commands::Deconv(cmd_args) => run_deconvolution(&cmd_args)?,
+    }
+    dbg!(&program_args);
+
+    Ok(())
+}
+fn main() -> Result<()> {
+    let program_args = parse_cmdline()?;
+    main_body(program_args)?;
     Ok(())
 }

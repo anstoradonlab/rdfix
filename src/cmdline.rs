@@ -8,7 +8,7 @@ use std::{env, fs, path::PathBuf};
 #[command(author, version, about, long_about = None)]
 pub struct RdfixArgs {
     #[command(subcommand)]
-    pub command: Option<Commands>,
+    pub command: Commands,
 }
 
 fn get_default_dir() -> PathBuf {
@@ -57,7 +57,7 @@ pub fn parse_cmdline() -> Result<RdfixArgs> {
     let args = RdfixArgs::parse_from(wild::args());
 
     match &args.command {
-        Some(Commands::Template(args)) => {
+        Commands::Template(args) => {
             if args.template_dir.exists() {
                 if !args.template_dir.is_dir() {
                     return Err(anyhow!(
@@ -77,7 +77,7 @@ pub fn parse_cmdline() -> Result<RdfixArgs> {
             }
         }
 
-        Some(Commands::Deconv(args)) => {
+        Commands::Deconv(args) => {
             for fname in args.input_files.iter() {
                 if !fname.exists() {
                     return Err(anyhow!("Input file \"{0}\" not found", fname.display()));
@@ -105,7 +105,6 @@ pub fn parse_cmdline() -> Result<RdfixArgs> {
                 }
             }
         }
-        _ => {}
     }
 
     Ok(args)
