@@ -1,15 +1,15 @@
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Result};
 use argmin::core::Gradient;
 use autodiff::F1;
 use ndarray::{Array1, ArrayView1};
-use num::Float;
+
 pub use nuts_rs::{new_sampler, Chain, CpuLogpFunc, LogpError, SampleStats, SamplerArgs};
 use thiserror::Error;
 
-use crate::forward::constants::{NUM_PARAMETERS, NUM_STATE_VARIABLES};
+
 
 use super::forward::{
-    DetectorForwardModel, DetectorForwardModelBuilder, DetectorParams, DetectorParamsBuilder,
+    DetectorForwardModelBuilder, DetectorParams, DetectorParamsBuilder,
 };
 
 use indicatif::ProgressIterator;
@@ -43,7 +43,7 @@ impl PosteriorDensity {
         // Define initial parameter vector and cost function
 
         //println!("Initial radon concentration: {:?}", initial_radon);
-        let init_param = {
+        let _init_param = {
             let v = pack_state_vector(&initial_radon, p.clone(), ts.clone(), inv_opts);
             Array1::<f64>::from_vec(v)
         };
@@ -123,7 +123,7 @@ impl CpuLogpFunc for DetectorInverseModel<F1> {
 
 
 impl DetectorInverseModel<F1> {
-    pub fn nuts_sample(&self, npts: usize, depth: Option<u64>) -> Result<(), anyhow::Error> {
+    pub fn nuts_sample(&self, _npts: usize, depth: Option<u64>) -> Result<(), anyhow::Error> {
         // We get the default sampler arguments
         let mut sampler_args = SamplerArgs::default();
 

@@ -66,8 +66,6 @@ fn main() -> Result<()> {
     }
     dbg!(&program_args);
 
-    return Ok(());
-
     let p = DetectorParamsBuilder::<f64>::default().build().unwrap();
     println!("parameters, f64: {:#?}", p);
 

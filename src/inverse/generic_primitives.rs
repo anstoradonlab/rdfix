@@ -1,28 +1,29 @@
 use num::Float;
 use std::f64;
 
+#[allow(unused)]
 /// Constant value for `sqrt(2 * pi)`
 const SQRT_2PI: f64 = 2.5066282746310005024157652848110452530069867406099;
-
+#[allow(unused)]
 /// Constant value for `ln(pi)`
 const LN_PI: f64 = 1.1447298858494001741434273513530587116472948129153;
-
+#[allow(unused)]
 /// Constant value for `ln(sqrt(2 * pi))`
 const LN_SQRT_2PI: f64 = 0.91893853320467274178032973640561763986139747363778;
-
+#[allow(unused)]
 /// Constant value for `ln(sqrt(2 * pi * e))`
 const LN_SQRT_2PIE: f64 = 1.4189385332046727417803297364056176398613974736378;
-
+#[allow(unused)]
 /// Constant value for `ln(2 * sqrt(e / pi))`
 const LN_2_SQRT_E_OVER_PI: f64 = 0.6207822376352452223455184457816472122518527279025978;
-
+#[allow(unused)]
 /// Constant value for `2 * sqrt(e / pi)`
 const TWO_SQRT_E_OVER_PI: f64 = 1.8603827342052657173362492472666631120594218414085755;
-
+#[allow(unused)]
 /// Constant value for Euler-Masheroni constant `lim(n -> inf) { sum(k=1 -> n)
 /// { 1/k - ln(n) } }`
 const EULER_MASCHERONI: f64 = 0.5772156649015328606065120900824024310421593359399235988057672348849;
-
+#[allow(unused)]
 /// Targeted accuracy instantiated over `f64`
 const ACC: f64 = 10e-11;
 
@@ -181,6 +182,7 @@ mod tests {
             Normal::new(location, scale).unwrap().ln_pdf(x)
         );
     }
+
 
     #[test]
     fn generic_poisson() {

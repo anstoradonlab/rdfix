@@ -39,7 +39,7 @@ pub mod quickplot;
 pub mod stepper;
 use self::stepper::integrate;
 
-use super::{InputRecord, InputRecordVec, InputTimeSeries};
+use super::{InputTimeSeries};
 use anyhow::Result;
 use constants::*;
 use num::{Float, ToPrimitive};
@@ -135,13 +135,13 @@ where
 {
     /// default set of parameters for a 1500L detector
     pub fn default_1500l(&mut self) -> &mut Self {
-        let mut new = self;
+        let new = self;
         new.volume = Some(P::from(1.5).unwrap());
         new
     }
     /// default set of parameters for a 700L detector
     pub fn default_700l(&mut self) -> &mut Self {
-        let mut new = self;
+        let new = self;
         new.volume = Some(P::from(0.7).unwrap());
         new
     }
@@ -632,7 +632,7 @@ where
         let system = self;
         let t0 = P::zero();
         let num_intervals = system.data.len() - 1;
-        let tmax = system.time_step * P::from(num_intervals).unwrap();
+        let _tmax = system.time_step * P::from(num_intervals).unwrap();
         let dt = system.time_step;
         let mut state = system.initial_state(system.radon[0]);
 
@@ -661,12 +661,12 @@ where
     }
 
     pub fn analytical_solution(&self) -> () {}
-    pub fn radon(&mut self, radon: &[f64]) -> () {}
+    pub fn radon(&mut self, _radon: &[f64]) -> () {}
 }
 
 #[cfg(test)]
 mod tests {
-    use debug_plotter::plot;
+    use crate::{InputRecord, InputRecordVec};
 
     use super::*;
     use assert_approx_eq::assert_approx_eq;

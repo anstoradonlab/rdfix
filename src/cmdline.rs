@@ -12,12 +12,12 @@ pub struct RdfixArgs {
 }
 
 fn get_default_dir() -> PathBuf {
-    let mut path = env::current_dir().unwrap();
+    let path = env::current_dir().unwrap();
     // path.pop();
     path
 }
 
-fn validate_output_dir(p: &PathBuf) -> Result<()> {
+fn validate_output_dir(_p: &PathBuf) -> Result<()> {
     //Err(anyhow!("Output directory must be empty"))
     Ok(())
 }

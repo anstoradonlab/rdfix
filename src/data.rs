@@ -1,9 +1,9 @@
 use anyhow::{anyhow, Result};
 use ndarray::prelude::*;
-use plotlib::grid::Grid;
+
 use std::{
     collections::HashMap,
-    path::{Path, PathBuf},
+    path::{PathBuf},
 };
 
 #[derive(Debug, Clone, Eq, Copy, PartialEq)]

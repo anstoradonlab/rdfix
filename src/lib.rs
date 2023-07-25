@@ -10,9 +10,9 @@ pub mod appconfig;
 //use std::ops::{Add, Div, Mul, Sub};
 
 use chrono::{prelude::*, Duration};
-use data::{DataSet, GridVariable};
+use data::{GridVariable};
 use forward::constants::{REFERENCE_TIME, TIME_UNITS};
-use ndarray::{Array1, ArrayView1};
+use ndarray::{ArrayView1};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::error::Error;

@@ -2,7 +2,7 @@ use anyhow::Result;
 use itertools::Itertools;
 use rdfix::forward::{DetectorForwardModelBuilder, DetectorParamsBuilder};
 use rdfix::get_test_timeseries;
-use rdfix::inverse::{fit_inverse_model, InversionOptions, InversionOptionsBuilder};
+use rdfix::inverse::{fit_inverse_model, InversionOptionsBuilder};
 
 fn main() -> Result<()> {
     let npts = 48;

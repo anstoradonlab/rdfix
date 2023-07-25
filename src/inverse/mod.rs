@@ -2,33 +2,33 @@ mod generic_primitives;
 
 use std::collections::HashMap;
 
-use crate::data;
+
 use crate::data::DataSet;
 use crate::data::GridVariable;
-use crate::inverse;
+
 use crate::inverse::generic_primitives::exp_transform;
 use serde::{Serialize, Deserialize};
 
 
-use self::generic_primitives::{lognormal_ln_pdf, normal_ln_pdf, poisson_ln_pmf};
+use self::generic_primitives::{normal_ln_pdf, poisson_ln_pmf};
 
 use super::forward::{
-    DetectorForwardModel, DetectorForwardModelBuilder, DetectorParams, DetectorParamsBuilder,
+    DetectorForwardModel, DetectorForwardModelBuilder, DetectorParams,
 };
-use argmin::core::LineSearch;
-use argmin::solver::linesearch::condition::ArmijoCondition;
-use argmin::solver::linesearch::BacktrackingLineSearch;
-use argmin::solver::linesearch::HagerZhangLineSearch;
+
+
+
+
 use cobyla::CobylaSolver;
 use hammer_and_sample::auto_corr_time;
-use ndarray::Array;
+
 use ndarray::s;
 use ndarray::Array1;
-use ndarray::Array2;
+
 use ndarray::Array3;
 use ndarray::ArrayD;
 use ndarray::Axis;
-use statrs::distribution::{Continuous, Discrete, LogNormal, Normal, Poisson};
+
 
 use derive_builder::Builder;
 
@@ -43,34 +43,34 @@ use argmin::solver::trustregion::TrustRegion;
 
 pub use argmin::core::{CostFunction, Error, Executor, Gradient, Hessian, State};
 
-use argmin::solver::gradientdescent::SteepestDescent;
-use argmin::solver::linesearch::MoreThuenteLineSearch;
-use argmin::solver::neldermead::NelderMead;
-use argmin::solver::quasinewton::BFGS;
-use argmin::solver::trustregion::Steihaug;
-use argmin::solver::trustregion::TrustRegion;
+
+
+
+
+
+
 
 use argmin::core::observers::{ObserverMode, SlogLogger};
 
 use num::Float;
 
-use hammer_and_sample::{sample, MinChainLen, Model, Parallel, Serial};
+use hammer_and_sample::{sample, MinChainLen, Model, Parallel};
 use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg64;
 
 // use ndarray::{Array, Array1, Array2};
 
-use log::{debug, error, info, log_enabled};
-use statrs::function::logistic::{checked_logit, logistic, logit};
-use statrs::statistics::Statistics;
 
-use super::{InputTimeSeries, OutputTimeSeries};
+use statrs::function::logistic::{checked_logit, logistic};
+
+
+use super::{InputTimeSeries};
 
 use anyhow::Result;
 
 use itertools::izip;
 
-use assert_approx_eq::assert_approx_eq;
+
 use autodiff::*;
 
 // Link to the BLAS C library
@@ -274,8 +274,8 @@ where
 pub fn pack_state_vector<P>(
     radon: &[P],
     p: DetectorParams<P>,
-    ts: InputTimeSeries,
-    opt: InversionOptions,
+    _ts: InputTimeSeries,
+    _opt: InversionOptions,
 ) -> Vec<P>
 where
     P: Float + std::fmt::Debug,
@@ -496,9 +496,9 @@ impl<P: Float + std::fmt::Debug> DetectorInverseModel<P> {
 
         let (log_r_screen_scale, log_exflow_scale, radon_transformed) =
             unpack_state_vector(&theta, &self.inv_opts);
-        let (mut r_screen_scale, lp_inc) = exp_transform(log_r_screen_scale);
+        let (mut r_screen_scale, _lp_inc) = exp_transform(log_r_screen_scale);
         //lp = lp - lp_inc;
-        let (mut exflow_scale, lp_inc) = exp_transform(log_exflow_scale);
+        let (mut exflow_scale, _lp_inc) = exp_transform(log_exflow_scale);
         //lp = lp - lp_inc;
 
         // println!("{:?} {:?}", log_exflow_scale, exflow_scale);
@@ -521,7 +521,7 @@ impl<P: Float + std::fmt::Debug> DetectorInverseModel<P> {
 
         let half = P::from(0.5).unwrap();
         let two = P::from(2.0).unwrap();
-        let thousand = P::from(1e3).unwrap();
+        let _thousand = P::from(1e3).unwrap();
 
         if r_screen_scale < half {
             // lp = lp - (r_screen_scale - half) * (r_screen_scale - half) * thousand;
@@ -836,7 +836,7 @@ pub fn fit_inverse_model(
 
     // Params, as differentiable type
     let p_diff = p.into_inner_type::<FT<f64>>();
-    let initial_radon_diff: Vec<_> = initial_radon
+    let _initial_radon_diff: Vec<_> = initial_radon
         .iter()
         .map(|x| F::<f64, f64>::cst(*x))
         .collect();
@@ -905,7 +905,7 @@ pub fn fit_inverse_model(
     */
 
     // COBYLA solver version
-    let mut cob_inverse_model = CobylaDetectorInverseModel(inverse_model.clone());
+    let cob_inverse_model = CobylaDetectorInverseModel(inverse_model.clone());
     let solver = CobylaSolver::new(init_param.as_slice().unwrap().to_owned());
     let res = Executor::new(cob_inverse_model, solver)
         .configure(|state| {
@@ -1030,6 +1030,9 @@ mod tests {
     use super::*;
     use crate::InputRecord;
     use crate::InputRecordVec;
+    use crate::forward::DetectorParamsBuilder;
+
+    use assert_approx_eq::assert_approx_eq;
 
     fn get_timeseries(npts: usize) -> InputRecordVec {
         let trec = InputRecord {
@@ -1221,7 +1224,6 @@ mod tests {
     fn transforms() {
         let npts = 16;
         let radon: Vec<f64> = (0..npts).map(|itm| itm as f64).collect();
-        let radon_avg = radon.iter().sum::<f64>() / (radon.len() as f64);
         println!("Original:      {:?}", radon);
         let mut radon_transformed = radon.clone();
         transform_radon_concs(&mut radon_transformed).unwrap();
@@ -1229,10 +1231,6 @@ mod tests {
         let mut radon_reconstructed = radon_transformed.clone();
         inverse_transform_radon_concs(&mut radon_reconstructed).unwrap();
 
-        //println!("Partial Recons:{:?}", radon_reconstructed);
-        //for itm in radon_reconstructed.iter_mut(){
-        //    *itm *= radon_avg;
-        //}
         println!("Reconstructed: {:?}", radon_reconstructed);
         for (r1, r2) in radon.into_iter().zip(radon_reconstructed) {
             assert_approx_eq!(r1, r2);
@@ -1242,5 +1240,11 @@ mod tests {
     #[test]
     fn log_funcs() {
         assert_eq!(log2_usize(2_usize.pow(12)), 12_usize);
+    }
+
+    #[test]
+    fn basic_funcs(){
+        assert_eq!(is_power_of_two(2_usize.pow(10)), true);
+        assert_eq!(log2_usize(2_usize.pow(10)), 10)
     }
 }
