@@ -12,8 +12,6 @@ use super::forward::{
     DetectorForwardModelBuilder, DetectorParams, DetectorParamsBuilder,
 };
 
-use indicatif::ProgressIterator;
-
 use super::*;
 
 use super::inverse::*;
@@ -149,7 +147,7 @@ impl DetectorInverseModel<F1> {
             .expect("Unrecoverable error during init");
         let mut trace = vec![]; // Collection of all draws
         let mut stats = vec![]; // Collection of statistics like the acceptance rate for each draw
-        for iter in (0..2000).progress() {
+        for iter in 0..2000 {
             let (draw, info) = sampler.draw().expect("Unrecoverable error during sampling");
 
             let _info_vec = info.to_vec(); // We can collect the stats in a Vec
@@ -202,7 +200,7 @@ pub fn test(npts: usize, depth: Option<u64>) -> Result<()> {
         .expect("Unrecoverable error during init");
     let mut trace = vec![]; // Collection of all draws
     let mut stats = vec![]; // Collection of statistics like the acceptance rate for each draw
-    for iter in (0..2000).progress() {
+    for iter in 0..2000 {
         let (draw, info) = sampler.draw().expect("Unrecoverable error during sampling");
 
         let _info_vec = info.to_vec(); // We can collect the stats in a Vec
