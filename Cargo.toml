@@ -50,6 +50,7 @@ chrono = { version = "0.4.26", features = ["serde"] }
 lazy_static = "1.4.0"
 clap = { version = "4.3.17", features = ["derive", "string"] }
 wild = "2.1.0"
+toml = "0.7.6"
 
 #finitediff = {version="0.1.4", features = ["ndarray"]}
 #ode_solvers = "0.3"

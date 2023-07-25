@@ -1,2 +1,11 @@
 /target
 .vscode
+/deconv-example
+test.nc
+test.svg
+test_results_todo.nc
+profile.json
+perf.data
+perf.data.old
+flamegraph.svg
+create_flamegraph.sh
