@@ -7,14 +7,14 @@ use anyhow::Result;
 use autodiff::FT;
 
 use crate::appconfig::AppConfigBuilder;
-use crate::cmdline::*;
+use crate::{cmdline::*, read_csv};
 use crate::forward::DetectorParamsBuilder;
 use crate::inverse::{fit_inverse_model, InversionOptionsBuilder};
 use crate::{get_test_timeseries, write_csv};
 
 use crate::{InputRecord, InputTimeSeries};
 
-use log::{error, info};
+use log::info;
 
 fn create_template(cmd_args: &TemplateArgs) -> Result<()> {
     info!("Writing template to {}", cmd_args.template_dir.display());
@@ -40,42 +40,23 @@ fn create_template(cmd_args: &TemplateArgs) -> Result<()> {
     Ok(())
 }
 
-fn run_deconvolution(_cmd_args: &DeconvArgs) -> Result<()> {
-    let p = DetectorParamsBuilder::<f64>::default().build().unwrap();
-    println!("parameters, f64: {:#?}", p);
+fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
+    // Load configuration file
+    info!("Loading configuration from {}", &cmd_args.config.display());
+    let raw_toml = std::fs::read_to_string(&cmd_args.config)?;
+    let config: crate::appconfig::AppConfig = toml::from_str(raw_toml.as_str())?;
 
-    let p_diff = DetectorParamsBuilder::<FT<f64>>::default().build().unwrap();
-    println!("parameters, differentiable: {:#?}", p_diff);
-    let trec = InputRecord {
-        time: 0.0,
-        /// LLD minus ULD (ULD are noise), missing values marked with NaN
-        counts: 10.0 * 0.2 * 60.0 * 30.0 + 30.0, // should equal 10 Bq/m3
-        background_count_rate: 1.0 / 60.0,
-        sensitivity: 0.2,
-        q_internal: 0.1 / 60.0,           //volumetric, m3/sec
-        q_external: 80.0 / 60.0 / 1000.0, //volumetric, m3/sec
-        airt: 21.0,                       // degC
-    };
+    // Load raw data files
     let mut ts = InputTimeSeries::new();
-    for _ in 0..50 {
-        ts.push(trec);
+    for fname in cmd_args.input_files.iter() {
+        info!("Loading data from {}", fname.display());
+        let f = std::fs::File::open(fname)?;
+        let mut file_data = read_csv(f)?;
+        ts.append(&mut file_data);
     }
-    ts.counts[20] *= 2.0;
-    ts.counts[21] *= 2.0;
 
-    /*MAKEITWORK
-    let inv_opts = InversionOptionsBuilder::default().build().unwrap();
-    fit_inverse_model(p, inv_opts, ts).unwrap();
-
-    */
-
-    println!("Running a simple test case...");
-
-    let p = DetectorParamsBuilder::default().build().unwrap();
-    let inv_opts = InversionOptionsBuilder::default().build().unwrap();
-    let npts = 48;
-    let mut ts = get_test_timeseries(npts);
-    ts.counts[npts - 1] += 500.0;
+    let p = config.detector.clone();
+    let inv_opts = config.inversion.clone();
 
     let fit_results = fit_inverse_model(p.clone(), inv_opts.clone(), ts.clone())?;
     fit_results.to_netcdf("test_results_todo.nc".into())?;
@@ -84,17 +65,12 @@ fn run_deconvolution(_cmd_args: &DeconvArgs) -> Result<()> {
 }
 
 pub fn main_body(program_args: RdfixArgs) -> Result<()> {
-    env_logger::init();
-    error!("Here's an error message for testing purposes");
-
     match &program_args.command {
         Commands::Template(cmd_args) => {
             create_template(&cmd_args)?;
         }
         Commands::Deconv(cmd_args) => run_deconvolution(&cmd_args)?,
     }
-    dbg!(&program_args);
-
     Ok(())
 }
 
@@ -103,9 +79,19 @@ mod tests {
     use super::*;
     use clap::Parser;
     use tempfile::tempdir;
+    use std::env;
 
+    /// Tests the whole program by running the top-level function as if it has been
+    /// run from the commmand line.  First generate a test case from the "small" template
+    /// then execute it
     #[test]
     fn run_cli() {
+
+        if env::var("RUST_LOG").is_err() {
+            env::set_var("RUST_LOG", "info")
+        }
+        env_logger::init();
+    
         let dir_input = tempdir().unwrap();
         let dir_output = tempdir().unwrap();
 
@@ -118,6 +104,8 @@ mod tests {
         ];
         let program_args: RdfixArgs = RdfixArgs::parse_from(cmdline);
         dbg!(&program_args);
+        main_body(program_args).unwrap();
+
 
         let config_fname = dir_input.path().join("config.toml");
         let input_fname = dir_input.path().join("raw-data.csv");
@@ -132,5 +120,6 @@ mod tests {
         ];
         let program_args: RdfixArgs = RdfixArgs::parse_from(cmdline);
         dbg!(&program_args);
+        main_body(program_args).unwrap();
     }
 }

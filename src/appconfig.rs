@@ -8,10 +8,10 @@ use crate::inverse::{InversionOptions, InversionOptionsBuilder};
 #[derive(Debug, Clone, Serialize, Deserialize, Builder)]
 pub struct AppConfig {
     #[builder(default = "DetectorParamsBuilder::<f64>::default().build().unwrap()")]
-    detector: DetectorParams<f64>,
+    pub detector: DetectorParams<f64>,
 
     #[builder(default = "InversionOptionsBuilder::default().build().unwrap()")]
-    inversion: InversionOptions,
+    pub inversion: InversionOptions,
 }
 
 /// Configuration options for No U-Turn Sampler
@@ -19,7 +19,7 @@ pub struct AppConfig {
 pub struct NutsOptions {
     /// Number of NUTS samples
     #[builder(default = "1000")]
-    nuts_samples: usize,
+    pub nuts_samples: usize,
 }
 
 /// Configuration options for EMCEE sampler

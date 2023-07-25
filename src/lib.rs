@@ -346,7 +346,7 @@ pub fn write_csv<W: Write>(file: &mut W, records: InputTimeSeries) -> Result<()>
     Ok(())
 }
 
-pub fn read_csv<R: Read>(file: R) -> Result<InputTimeSeries, Box<dyn Error>> {
+pub fn read_csv<R: Read>(file: R) -> Result<InputTimeSeries> {
     let mut rdr = csv::Reader::from_reader(file);
     let mut data = InputTimeSeries::new();
     for result in rdr.deserialize() {
