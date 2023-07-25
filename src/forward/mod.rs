@@ -243,45 +243,6 @@ impl<P: Float + std::fmt::Debug> Interpolator<P>{
     }
 }
 
-/// interpolation utility functions
-fn linear_interpolation<P>(ti: P, y: &[P], tmax: P) -> P
-where
-    P: Float + std::fmt::Debug,
-{
-    let yi = {
-        if ti <= P::zero() {
-            y[0]
-        } else if ti >= P::from(tmax).unwrap() {
-            y[y.len() - 1]
-        } else {
-            assert!(ti <= P::from(tmax).unwrap());
-            assert!(ti >= P::from(0.0).unwrap());
-            let time_step = tmax / P::from(y.len() - 1).unwrap();
-            let p = ti / time_step;
-            let idx0 = p.floor().to_usize().unwrap();
-            let idx1 = p.ceil().to_usize().unwrap();
-            let w1 = p - P::from(idx0).unwrap();
-            let w0 = P::from(1.0).unwrap() - w1;
-            y[idx0] * w0 + y[idx1] * w1
-        }
-    };
-    yi
-}
-
-fn stepwise_interpolation<P>(ti: P, y: &[P], tmax: P) -> P
-where
-    P: Float + std::fmt::Debug,
-{
-    let time_step = tmax / P::from(y.len() - 1).unwrap();
-    let p = ti / P::from(time_step).unwrap();
-    let idx1 = if ti <= P::zero() {
-        0
-    } else {
-        p.ceil().to_usize().unwrap()
-    };
-    y[idx1]
-}
-
 /*
 /// state vector for detector
 type FP = f64;
