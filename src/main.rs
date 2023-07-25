@@ -107,3 +107,40 @@ fn main() -> Result<()> {
     main_body(program_args)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+    use clap::Parser;
+
+    #[test]
+    fn run_cli() { 
+        let dir_input = tempdir().unwrap();
+        let dir_output = tempdir().unwrap();
+
+        let cmdline = vec![
+            "rdfix-deconvolve",
+            "template",
+            "-t",
+            dir_input.path().to_str().unwrap(),
+            "small",
+        ];
+        let program_args: RdfixArgs = RdfixArgs::parse_from(cmdline);
+        dbg!(&program_args);
+
+        let config_fname = dir_input.path().join("config.toml");
+        let input_fname = dir_input.path().join("raw-data.csv");
+        let cmdline = vec![
+            "rdfix-deconvolve",
+            "deconv",
+            "-c",
+            config_fname.to_str().unwrap(),
+            "-o",
+            dir_output.path().to_str().unwrap(),
+            input_fname.to_str().unwrap(),
+        ];
+        let program_args: RdfixArgs = RdfixArgs::parse_from(cmdline);
+        dbg!(&program_args);
+    }
+}

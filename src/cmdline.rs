@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
-use clap::{Args, Parser, Subcommand};
-use std::{env, fs, path::PathBuf};
+use clap::{Args, Parser, Subcommand, ValueEnum};
+use std::{fs, path::PathBuf};
 
 /// Deconvolve two-filter dual-flow-loop radon detector output
 /// using the method from https://doi.org/10.5194/amt-9-2689-2016
@@ -12,8 +12,8 @@ pub struct RdfixArgs {
 }
 
 fn get_default_dir() -> PathBuf {
-    let path = env::current_dir().unwrap();
-    // path.pop();
+    //let path = env::current_dir().unwrap();
+    let path = PathBuf::from(".");
     path
 }
 
@@ -49,8 +49,20 @@ pub struct DeconvArgs {
 #[derive(Args, Debug)]
 pub struct TemplateArgs {
     /// Where to create the template
-    #[arg(short, long, value_name = "DIR", default_value=get_default_dir().join("deconv-example").into_os_string())]
+    #[arg(short, long, value_name = "DIR", default_value=get_default_dir().join("deconv-example-input").into_os_string())]
     pub template_dir: PathBuf,
+
+    /// The kind of template to generate
+    #[arg(value_enum, default_value_t=TemplateKind::Default)]
+    pub template_kind: TemplateKind,
+}
+
+#[derive(ValueEnum, Debug, Clone)]
+pub enum TemplateKind {
+    /// Default template; a minimal case with parameters chosen to produce valid results
+    Default,
+    /// Small template using very few iterations for fast execution; this template will not generate valid results
+    Small,
 }
 
 pub fn parse_cmdline() -> Result<RdfixArgs> {
@@ -110,8 +122,13 @@ pub fn parse_cmdline() -> Result<RdfixArgs> {
     Ok(args)
 }
 
-#[test]
-fn verify_cli() {
-    use clap::CommandFactory;
-    RdfixArgs::command().debug_assert()
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn verify_cli() {
+        use clap::CommandFactory;
+        RdfixArgs::command().debug_assert()
+    }
 }
