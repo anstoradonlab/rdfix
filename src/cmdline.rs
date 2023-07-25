@@ -8,7 +8,7 @@ use std::{env, fs, path::PathBuf};
 #[command(author, version, about, long_about = None)]
 pub struct RdfixArgs {
     #[command(subcommand)]
-    command: Option<Commands>,
+    pub command: Option<Commands>,
 }
 
 fn get_default_dir() -> PathBuf {
@@ -34,21 +34,21 @@ pub enum Commands {
 pub struct DeconvArgs {
     /// Sets the config file
     #[arg(short, long, value_name = "FILE")]
-    config: PathBuf,
+    pub config: PathBuf,
 
     /// Sets the output directory
     #[arg(short, long, value_name = "OUTPUT_DIR", default_value=get_default_dir().join("deconv-output").into_os_string())]
-    output: PathBuf,
+    pub output: PathBuf,
 
     /// Input files
-    input_files: Vec<PathBuf>,
+    pub input_files: Vec<PathBuf>,
 }
 
 #[derive(Args, Debug)]
 pub struct TemplateArgs {
     /// Where to create the template
-    #[arg(short, long, value_name = "DIR", default_value=get_default_dir().join("deconv-input").into_os_string())]
-    template_dir: PathBuf,
+    #[arg(short, long, value_name = "DIR", default_value=get_default_dir().join("deconv-example").into_os_string())]
+    pub template_dir: PathBuf,
 }
 
 pub fn parse_cmdline() -> Result<RdfixArgs> {

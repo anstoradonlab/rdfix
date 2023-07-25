@@ -1,9 +1,13 @@
+use std::fs::File;
+use std::fs;
+
 use anyhow::Result;
 
 use autodiff::{F1, FT};
 
+use rdfix::appconfig::AppConfigBuilder;
 use rdfix::forward::{DetectorForwardModelBuilder, DetectorParamsBuilder};
-use rdfix::get_test_timeseries;
+use rdfix::{get_test_timeseries, write_csv};
 use rdfix::inverse::{
     fit_inverse_model, pack_state_vector, DetectorInverseModel, Gradient, InversionOptionsBuilder,
 };
@@ -19,12 +23,50 @@ use rdfix::{InputRecord, InputTimeSeries};
 
 use log::{debug, error, info, log_enabled, Level};
 
+
+fn create_template(cmd_args: &TemplateArgs) -> Result<()>{
+    info!("Writing template to {}", cmd_args.template_dir.display());
+
+    let fname = cmd_args.template_dir.clone().join("raw-data.csv");
+    info!("Writing example data file to {}", fname.display());
+    let ts = get_test_timeseries(48*3);
+    let mut f = File::create(&fname)?;
+    write_csv(&mut f, ts)?;
+    let config = AppConfigBuilder::default().build().unwrap();
+    let config_str = toml::to_string(&config).unwrap();
+
+    let config_fname = cmd_args.template_dir.clone().join("config.toml");
+    info!("Writing example configuration file to {}", config_fname.display());
+    fs::write(&config_fname, config_str)?;
+
+    let output_fname = cmd_args.template_dir.clone().join("deconv-output");
+    println!("Template created.  Perform a test by running:\n> rdfix-deconvolve deconv --config {} --output {} {}", config_fname.display(), output_fname.display(), fname.display());
+    
+    Ok(())
+}
+
+
+fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()>{
+    todo!();
+}
+
 fn main() -> Result<()> {
     env_logger::init();
-    error!("Here's an error message for tesing purposes");
+    error!("Here's an error message for testing purposes");
 
-    let args = parse_cmdline();
-    dbg!(&args);
+    let program_args = parse_cmdline()?;
+
+    match &program_args.command{
+        Some(Commands::Template(cmd_args)) => {
+            create_template(&cmd_args)?;
+        },
+        Some(Commands::Deconv(cmd_args)) => {run_deconvolution(&cmd_args)?},
+        None => unreachable!(),
+
+    }
+    dbg!(&program_args);
+
+    return Ok(());
 
     let p = DetectorParamsBuilder::<f64>::default().build().unwrap();
     println!("parameters, f64: {:#?}", p);

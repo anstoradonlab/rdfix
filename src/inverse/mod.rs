@@ -7,6 +7,8 @@ use crate::data::DataSet;
 use crate::data::GridVariable;
 use crate::inverse;
 use crate::inverse::generic_primitives::exp_transform;
+use serde::{Serialize, Deserialize};
+
 
 use self::generic_primitives::{lognormal_ln_pdf, normal_ln_pdf, poisson_ln_pmf};
 
@@ -302,7 +304,7 @@ where
     (r_screen_scale, exflow_scale, radon_transformed)
 }
 
-#[derive(Builder, Copy, Debug, Clone)]
+#[derive(Builder, Copy, Debug, Clone, Serialize, Deserialize)]
 pub struct InversionOptions {
     // TODO: proper default value
     #[builder(default = "0.01")]

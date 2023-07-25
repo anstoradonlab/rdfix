@@ -5,6 +5,7 @@ pub mod forward;
 pub mod inverse;
 pub mod nuts;
 pub mod cmdline;
+pub mod appconfig;
 
 //use std::ops::{Add, Div, Mul, Sub};
 
@@ -16,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::error::Error;
 use std::io::{Read, Write};
+use anyhow::Result;
 
 #[macro_use]
 extern crate soa_derive;
@@ -333,7 +335,7 @@ pub fn get_test_timeseries(npts: usize) -> InputRecordVec {
 // pub fn write_csv<W: Write>(file: &mut W, records: impl IntoIterator<Item = impl Serialize>)
 // but it's complicated by the use of SOA_Derive which forces us to use to_owned
 
-pub fn write_csv<W: Write>(file: &mut W, records: InputTimeSeries) -> Result<(), Box<dyn Error>> {
+pub fn write_csv<W: Write>(file: &mut W, records: InputTimeSeries) -> Result<()> {
     let mut wtr = csv::Writer::from_writer(file);
     for row in &records {
         let row: IoInputRecord = row.to_owned().into();

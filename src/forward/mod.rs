@@ -31,6 +31,7 @@ let idx = x.to_usize().unwrap();
 */
 
 use derive_builder::Builder;
+use serde::{Deserialize, Serialize};
 //use ode_solvers::dop853::*;
 //use ode_solvers::*;
 pub mod constants;
@@ -66,7 +67,7 @@ pub enum TransformationKind {
     WeakCorrelation,
 }
 
-#[derive(Debug, Clone, Builder)]
+#[derive(Debug, Clone, Builder, Serialize, Deserialize)]
 pub struct DetectorParams<P>
 where
     //P : potentially differentiably (e.g. autodiff's type) or standard float
