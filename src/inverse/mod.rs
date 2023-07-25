@@ -2,23 +2,16 @@ mod generic_primitives;
 
 use std::collections::HashMap;
 
-
 use crate::data::DataSet;
 use crate::data::GridVariable;
 
 use crate::inverse::generic_primitives::exp_transform;
 use crate::inverse::generic_primitives::lognormal_ln_pdf;
-use serde::{Serialize, Deserialize};
-
+use serde::{Deserialize, Serialize};
 
 use self::generic_primitives::{normal_ln_pdf, poisson_ln_pmf};
 
-use super::forward::{
-    DetectorForwardModel, DetectorForwardModelBuilder, DetectorParams,
-};
-
-
-
+use super::forward::{DetectorForwardModel, DetectorForwardModelBuilder, DetectorParams};
 
 use cobyla::CobylaSolver;
 use hammer_and_sample::auto_corr_time;
@@ -29,7 +22,6 @@ use ndarray::Array1;
 use ndarray::Array3;
 use ndarray::ArrayD;
 use ndarray::Axis;
-
 
 use derive_builder::Builder;
 
@@ -44,13 +36,6 @@ use argmin::solver::trustregion::TrustRegion;
 
 pub use argmin::core::{CostFunction, Error, Executor, Gradient, Hessian, State};
 
-
-
-
-
-
-
-
 use argmin::core::observers::{ObserverMode, SlogLogger};
 
 use num::Float;
@@ -61,16 +46,13 @@ use rand_pcg::Pcg64;
 
 // use ndarray::{Array, Array1, Array2};
 
-
 use statrs::function::logistic::{checked_logit, logistic};
 
-
-use super::{InputTimeSeries};
+use super::InputTimeSeries;
 
 use anyhow::Result;
 
 use itertools::izip;
-
 
 use autodiff::*;
 
@@ -438,13 +420,13 @@ impl DetectorInverseModel<f64> {
         let radon_samples = samples.slice(s![2.., .., ..]);
 
         // Convert to variables with metadata
-        let r_screen_scale_samples =  GridVariable::new_from_parts(
+        let r_screen_scale_samples = GridVariable::new_from_parts(
             r_screen_scale_samples.into_dyn().into_owned(),
             "r_screen_scale",
             &["walker", "sample"],
             None,
         );
-        let exflow_scale_samples =  GridVariable::new_from_parts(
+        let exflow_scale_samples = GridVariable::new_from_parts(
             exflow_scale_samples.into_dyn().into_owned(),
             "exflow_scale",
             &["walker", "sample"],
@@ -459,16 +441,21 @@ impl DetectorInverseModel<f64> {
         );
 
         // TODO: fix timestep
-        let time_step = 30.0*60.0;
-        let model_time = Array1::range(0.0,self.ts.len() as f64, 1.0) * time_step;
+        let time_step = 30.0 * 60.0;
+        let model_time = Array1::range(0.0, self.ts.len() as f64, 1.0) * time_step;
         let model_time = GridVariable::new_from_parts(
             model_time.into_dyn().into_owned(),
             "model_time",
             &["time"],
-            Some(HashMap::from([("units".to_owned(), "seconds".to_owned())]))
+            Some(HashMap::from([("units".to_owned(), "seconds".to_owned())])),
         );
 
-        let data = vec![model_time, r_screen_scale_samples, exflow_scale_samples, radon_samples];
+        let data = vec![
+            model_time,
+            r_screen_scale_samples,
+            exflow_scale_samples,
+            radon_samples,
+        ];
 
         Ok(data)
     }
@@ -551,14 +538,12 @@ impl<P: Float + std::fmt::Debug> DetectorInverseModel<P> {
         // Lognormal priors
         let r_screen_scale_mu = P::one().ln();
         let r_screen_scale_sigma = P::from(self.inv_opts.r_screen_sigma).unwrap();
-        lprior = lprior
-            + lognormal_ln_pdf(r_screen_scale_mu, r_screen_scale_sigma, r_screen_scale);
+        lprior = lprior + lognormal_ln_pdf(r_screen_scale_mu, r_screen_scale_sigma, r_screen_scale);
 
         // TODO: get exflow from data instead of from the parameters
         let exflow_scale_mu = P::one().ln();
         let exflow_sigma = P::from(self.inv_opts.exflow_sigma).unwrap();
-        lprior = lprior
-            + lognormal_ln_pdf(exflow_scale_mu, exflow_sigma, exflow_scale);
+        lprior = lprior + lognormal_ln_pdf(exflow_scale_mu, exflow_sigma, exflow_scale);
 
         // Normal priors on parameters
         let r_screen_scale_mu = P::one();
@@ -1028,9 +1013,9 @@ pub fn fit_inverse_model(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::forward::DetectorParamsBuilder;
     use crate::InputRecord;
     use crate::InputRecordVec;
-    use crate::forward::DetectorParamsBuilder;
 
     use assert_approx_eq::assert_approx_eq;
 
@@ -1245,7 +1230,7 @@ mod tests {
     }
 
     #[test]
-    fn basic_funcs(){
+    fn basic_funcs() {
         assert_eq!(is_power_of_two(2_usize.pow(10)), true);
         assert_eq!(log2_usize(2_usize.pow(10)), 10)
     }

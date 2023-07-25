@@ -39,7 +39,7 @@ pub mod quickplot;
 pub mod stepper;
 use self::stepper::integrate;
 
-use super::{InputTimeSeries};
+use super::InputTimeSeries;
 use anyhow::Result;
 use constants::*;
 use num::{Float, ToPrimitive};
@@ -183,12 +183,14 @@ where
     #[builder(default = "60")]
     pub integration_substeps: usize,
 
-    #[builder(default = "Interpolator::<P>::new(self.data.as_ref().unwrap().len(), self.time_step.unwrap())")]
+    #[builder(
+        default = "Interpolator::<P>::new(self.data.as_ref().unwrap().len(), self.time_step.unwrap())"
+    )]
     pub interp: Interpolator<P>,
 }
 
-#[derive(Copy,Clone,Debug)]
-pub struct Interpolator<P: Float + std::fmt::Debug>{
+#[derive(Copy, Clone, Debug)]
+pub struct Interpolator<P: Float + std::fmt::Debug> {
     pub time_step: P,
     pub npts: usize,
     pub p: P,
@@ -199,20 +201,28 @@ pub struct Interpolator<P: Float + std::fmt::Debug>{
     pub w1: P,
 }
 
-impl<P: Float + std::fmt::Debug> Interpolator<P>{
+impl<P: Float + std::fmt::Debug> Interpolator<P> {
     /// Create new interpolator with `npts` points on the domain [0.0, tmax]
-    fn new(npts: usize, time_step: P) -> Self{
+    fn new(npts: usize, time_step: P) -> Self {
         let tmax = time_step * P::from(npts).unwrap();
         let p = P::zero();
         let idx0 = p.floor().to_usize().unwrap();
         let idx1 = p.ceil().to_usize().unwrap();
         let w1 = p - P::from(idx0).unwrap();
         let w0 = P::from(1.0).unwrap() - w1;
-        Interpolator { time_step, npts, p, tmax, idx0, idx1, w0, w1 }
+        Interpolator {
+            time_step,
+            npts,
+            p,
+            tmax,
+            idx0,
+            idx1,
+            w0,
+            w1,
+        }
     }
     /// Set the interpolation time to ti
-    fn ti(&mut self, ti:P){
-
+    fn ti(&mut self, ti: P) {
         if ti <= P::zero() {
             self.w0 = P::one();
             self.w1 = P::zero();
@@ -221,10 +231,9 @@ impl<P: Float + std::fmt::Debug> Interpolator<P>{
         } else if ti >= P::from(self.tmax).unwrap() {
             self.w0 = P::zero();
             self.w1 = P::one();
-            self.idx0 = self.npts-1;
-            self.idx1 = self.npts-1;
-        }
-        else {
+            self.idx0 = self.npts - 1;
+            self.idx1 = self.npts - 1;
+        } else {
             self.p = ti / self.time_step;
             self.idx0 = self.p.floor().to_usize().unwrap();
             self.idx1 = self.p.ceil().to_usize().unwrap();
@@ -233,12 +242,11 @@ impl<P: Float + std::fmt::Debug> Interpolator<P>{
         }
     }
     /// Linear interpolation of y at ti, values outside of [0.0, tmax] are taken from endpoints
-    fn linear(& self, y: &[P]) -> P{
+    fn linear(&self, y: &[P]) -> P {
         y[self.idx0] * self.w0 + y[self.idx1] * self.w1
-
     }
     /// Stepwise interpolation of y at ti, values outside of [0.0, tmax] are taken from endpoints
-    fn stepwise(self, y: &[P]) -> P{
+    fn stepwise(self, y: &[P]) -> P {
         y[self.idx1]
     }
 }
@@ -525,7 +533,7 @@ where
             cal_source_strength: NP::from(self.cal_source_strength).unwrap(),
             cal_begin: NP::from(self.cal_begin).unwrap(),
             cal_duration: NP::from(self.cal_duration).unwrap(),
-            interp: Interpolator::<NP>::new(self.data.len(), NP::from(self.time_step).unwrap())
+            interp: Interpolator::<NP>::new(self.data.len(), NP::from(self.time_step).unwrap()),
         }
     }
 
@@ -627,7 +635,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{InputRecord};
+    use crate::InputRecord;
 
     use super::*;
     use assert_approx_eq::assert_approx_eq;

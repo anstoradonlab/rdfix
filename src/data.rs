@@ -1,10 +1,7 @@
 use anyhow::{anyhow, Result};
 use ndarray::prelude::*;
 
-use std::{
-    collections::HashMap,
-    path::{PathBuf},
-};
+use std::{collections::HashMap, path::PathBuf};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct GridVariable {
@@ -60,9 +57,9 @@ impl DataSet {
         DataSet { vars }
     }
 
-    pub fn var_ref(&self, vname: &str) -> Option<&GridVariable>{
-        for v in self.vars.iter(){
-            if v.name == vname{
+    pub fn var_ref(&self, vname: &str) -> Option<&GridVariable> {
+        for v in self.vars.iter() {
+            if v.name == vname {
                 return Some(v);
             }
         }

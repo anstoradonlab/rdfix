@@ -184,7 +184,6 @@ mod tests {
         );
     }
 
-
     #[test]
     fn generic_poisson() {
         let lambda_test = [10.0, 100.0, 1000.0];

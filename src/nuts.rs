@@ -1,4 +1,4 @@
-use anyhow::{Result};
+use anyhow::Result;
 use argmin::core::Gradient;
 use autodiff::F1;
 use ndarray::{Array1, ArrayView1};
@@ -6,11 +6,7 @@ use ndarray::{Array1, ArrayView1};
 pub use nuts_rs::{new_sampler, Chain, CpuLogpFunc, LogpError, SampleStats, SamplerArgs};
 use thiserror::Error;
 
-
-
-use super::forward::{
-    DetectorForwardModelBuilder, DetectorParams, DetectorParamsBuilder,
-};
+use super::forward::{DetectorForwardModelBuilder, DetectorParams, DetectorParamsBuilder};
 
 use super::*;
 
@@ -97,8 +93,6 @@ impl CpuLogpFunc for PosteriorDensity {
     }
 }
 
-
-
 impl CpuLogpFunc for DetectorInverseModel<F1> {
     type Err = PosteriorLogpError;
 
@@ -118,8 +112,6 @@ impl CpuLogpFunc for DetectorInverseModel<F1> {
     }
 }
 
-
-
 impl DetectorInverseModel<F1> {
     pub fn nuts_sample(&self, _npts: usize, depth: Option<u64>) -> Result<(), anyhow::Error> {
         // We get the default sampler arguments
@@ -131,7 +123,6 @@ impl DetectorInverseModel<F1> {
         if let Some(maxdepth) = depth {
             sampler_args.maxdepth = maxdepth; // use a small value, e.g. 3 for testing...
         }
-
 
         let logp_func = self.clone();
         let dim = logp_func.dim();

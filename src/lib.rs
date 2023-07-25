@@ -1,23 +1,23 @@
 //! # This is a markdown title inside the file `lib.rs`
 
+pub mod appconfig;
+pub mod cmdline;
 pub mod data;
 pub mod forward;
 pub mod inverse;
 pub mod nuts;
-pub mod cmdline;
-pub mod appconfig;
 
 //use std::ops::{Add, Div, Mul, Sub};
 
+use anyhow::Result;
 use chrono::{prelude::*, Duration};
-use data::{GridVariable};
+use data::GridVariable;
 use forward::constants::{REFERENCE_TIME, TIME_UNITS};
-use ndarray::{ArrayView1};
+use ndarray::ArrayView1;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::error::Error;
 use std::io::{Read, Write};
-use anyhow::Result;
 
 #[macro_use]
 extern crate soa_derive;
@@ -362,7 +362,7 @@ pub fn read_csv<R: Read>(file: R) -> Result<InputTimeSeries, Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn calculate_average() {
         let _ts = get_test_timeseries(100);
