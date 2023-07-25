@@ -396,7 +396,6 @@ impl DetectorInverseModel<f64> {
         // per-walker autocorrelation
         println!("shape: {}, {}", chain.len(), chain[0].len());
         println!("organising chains");
-        use rayon::prelude::*;
 
         let mut samples = Array3::<f64>::zeros((dim, num_walkers, num_samples));
         for ii in 0..num_samples {

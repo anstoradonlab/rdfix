@@ -1,12 +1,10 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{criterion_group, criterion_main, Criterion};
 
-use autodiff::{F1, FT};
 
-use rdfix::forward::{DetectorForwardModelBuilder, DetectorParamsBuilder};
-use rdfix::get_test_timeseries;
-use rdfix::inverse::{
-    fit_inverse_model, pack_state_vector, DetectorInverseModel, Gradient, InversionOptionsBuilder,
-};
+
+
+
+
 
 use rdfix_gf::generated_functions::{calc_na_nb_factors,calc_na_nb_factors_f64};
 

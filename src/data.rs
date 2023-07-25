@@ -6,12 +6,6 @@ use std::{
     path::{PathBuf},
 };
 
-#[derive(Debug, Clone, Eq, Copy, PartialEq)]
-enum Dim {
-    Sized(u64),
-    Unlimited(u64),
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct GridVariable {
     pub name: String,

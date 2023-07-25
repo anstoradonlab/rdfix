@@ -362,10 +362,10 @@ pub fn read_csv<R: Read>(file: R) -> Result<InputTimeSeries, Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use assert_approx_eq::assert_approx_eq;
+    
     #[test]
     fn calculate_average() {
-        let ts = get_test_timeseries(100);
+        let _ts = get_test_timeseries(100);
         /*
         let avg = ts.mean();
         let val = ts.get(0).unwrap().to_owned();

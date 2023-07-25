@@ -3,13 +3,13 @@ use std::fs;
 
 use anyhow::Result;
 
-use autodiff::{F1, FT};
+use autodiff::{FT};
 
 use rdfix::appconfig::AppConfigBuilder;
-use rdfix::forward::{DetectorForwardModelBuilder, DetectorParamsBuilder};
+use rdfix::forward::{DetectorParamsBuilder};
 use rdfix::{get_test_timeseries, write_csv};
 use rdfix::inverse::{
-    fit_inverse_model, pack_state_vector, DetectorInverseModel, Gradient, InversionOptionsBuilder,
+    fit_inverse_model, InversionOptionsBuilder,
 };
 use rdfix::cmdline::{*};
 
@@ -21,7 +21,7 @@ use rdfix::inverse::{
 
 use rdfix::{InputRecord, InputTimeSeries};
 
-use log::{debug, error, info, log_enabled, Level};
+use log::{error, info};
 
 
 fn create_template(cmd_args: &TemplateArgs) -> Result<()>{
@@ -46,7 +46,7 @@ fn create_template(cmd_args: &TemplateArgs) -> Result<()>{
 }
 
 
-fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()>{
+fn run_deconvolution(_cmd_args: &DeconvArgs) -> Result<()>{
     todo!();
 }
 
