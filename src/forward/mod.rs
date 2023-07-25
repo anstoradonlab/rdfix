@@ -67,10 +67,6 @@ pub enum TransformationKind {
     WeakCorrelation,
 }
 
-fn default_helper_one<T: Float>() -> T{
-    T::from(1.0).unwrap()
-}
-
 #[derive(Debug, Clone, Builder, Serialize, Deserialize)]
 pub struct DetectorParams<P>
 where
@@ -80,7 +76,6 @@ where
     /// External flow rate scale factor (default 1.0)
     /// The external flow rate is taken from the data file
     #[builder(default = "P::from(1.0).unwrap()")]
-    #[serde(skip, default = "default_helper_one")]
     pub exflow_scale: P,
     /// 1500 L in about 3 minutes in units of m3/s
     #[builder(default = "P::from(1.5/60.).unwrap()")]
@@ -96,7 +91,6 @@ where
     pub r_screen: P,
     /// Scale factor for r_screen (default of 1.0)
     #[builder(default = "P::from(1.0).unwrap()")]
-    #[serde(skip, default = "default_helper_one")]
     pub r_screen_scale: P,
     /// Overall delay time (lag) of detector (default 0.0 s)
     #[builder(default = "P::from(0.0).unwrap()")]
