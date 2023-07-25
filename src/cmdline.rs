@@ -17,10 +17,12 @@ fn get_default_dir() -> PathBuf {
     path
 }
 
+/* Maybe create this function?
 fn validate_output_dir(_p: &PathBuf) -> Result<()> {
     //Err(anyhow!("Output directory must be empty"))
     Ok(())
 }
+ */
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {

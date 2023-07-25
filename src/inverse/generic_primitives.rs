@@ -150,6 +150,7 @@ pub fn exp_transform<P: Float>(u: P) -> (P, P) {
 /// Inverse exponential transform (i.e. log), this doesn't need to report a change
 /// to the log_p
 ///
+#[allow(unused)] // TODO: remove this
 pub fn inverse_exp_transform<P: Float>(sigma: P) -> P {
     sigma.ln()
 }

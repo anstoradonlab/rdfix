@@ -633,28 +633,6 @@ mod tests {
     use assert_approx_eq::assert_approx_eq;
     use quickplot::draw_plot;
 
-    fn get_timeseries(npts: usize) -> InputRecordVec {
-        let trec = InputRecord {
-            time: 0.0,
-            /// LLD minus ULD (ULD are noise), missing values marked with NaN
-            counts: 1000.0,
-            background_count_rate: 0.0, //1.0/60.0,
-            // sensitivity is chosen so that 1 Bq/m3 = 1000 counts / 30-min
-            sensitivity: 1000. / (3600.0 / 2.0),
-            q_internal: 0.1 / 60.0,           //volumetric, m3/sec
-            q_external: 80.0 / 60.0 / 1000.0, //volumetric, m3/sec
-            airt: 21.0,                       // degC
-        };
-        let mut ts = InputRecordVec::new();
-        for _ in 0..npts {
-            ts.push(trec);
-        }
-        ts.counts[npts / 2] *= 5.0;
-        ts.counts[npts / 2 + 1] *= 5.0;
-
-        ts
-    }
-
     #[test]
     fn can_create_params() {
         let p = DetectorParamsBuilder::default()

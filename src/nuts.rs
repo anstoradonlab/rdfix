@@ -172,7 +172,7 @@ impl DetectorInverseModel<F1> {
     }
 }
 
-fn test(npts: usize, depth: Option<u64>) -> Result<()> {
+pub fn test(npts: usize, depth: Option<u64>) -> Result<()> {
     // We get the default sampler arguments
     let mut sampler_args = SamplerArgs::default();
 
@@ -230,6 +230,6 @@ mod tests {
 
     #[test]
     fn sample_nuts() {
-        test(4, Some(3));
+        let _ = test(4, Some(3));
     }
 }

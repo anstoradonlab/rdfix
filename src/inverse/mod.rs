@@ -7,6 +7,7 @@ use crate::data::DataSet;
 use crate::data::GridVariable;
 
 use crate::inverse::generic_primitives::exp_transform;
+use crate::inverse::generic_primitives::lognormal_ln_pdf;
 use serde::{Serialize, Deserialize};
 
 
@@ -124,7 +125,7 @@ fn _disabled_inverse_transform_radon_concs(p: &mut [f64]) -> Result<()> {
 }
 
 // Transform radon concentrations from actual values into a simpler-to-sample form
-fn transform_radon_concs1(radon_conc: &mut [f64]) -> Result<()> {
+pub fn transform_radon_concs1(radon_conc: &mut [f64]) -> Result<()> {
     let n = radon_conc.len();
     let rnsum: f64 = radon_conc.iter().sum();
     let mut acc = rnsum;
@@ -142,7 +143,7 @@ fn transform_radon_concs1(radon_conc: &mut [f64]) -> Result<()> {
 }
 
 // Reverse transform radon concentration (from sampling form back to true values)
-fn inverse_transform_radon_concs1(p: &mut [f64]) -> Result<()> {
+pub fn inverse_transform_radon_concs1(p: &mut [f64]) -> Result<()> {
     // copy so that we can report the error later
     let p_saved: Vec<_> = p.into();
 
@@ -169,11 +170,11 @@ fn inverse_transform_radon_concs1(p: &mut [f64]) -> Result<()> {
     Ok(())
 }
 
-fn is_power_of_two(num: usize) -> bool {
+pub fn is_power_of_two(num: usize) -> bool {
     num & (num - 1) == 0
 }
 
-fn log2_usize(num: usize) -> usize {
+pub fn log2_usize(num: usize) -> usize {
     let mut tmp = num;
     let mut shift_count = 0;
     while tmp > 0 {
@@ -184,7 +185,7 @@ fn log2_usize(num: usize) -> usize {
 }
 
 // Transform radon concentrations from actual values into a simpler-to-sample form
-fn transform_radon_concs<P>(radon_conc: &mut [P]) -> Result<()>
+pub fn transform_radon_concs<P>(radon_conc: &mut [P]) -> Result<()>
 where
     P: Float,
 {
@@ -221,7 +222,7 @@ where
 }
 
 // Reverse transform radon concentration (from sampling form back to true values)
-fn inverse_transform_radon_concs<P>(p: &mut [P]) -> Result<()>
+pub fn inverse_transform_radon_concs<P>(p: &mut [P]) -> Result<()>
 where
     P: Float + std::fmt::Debug,
 {
@@ -262,12 +263,14 @@ where
     Ok(())
 }
 
-fn counts_to_concentration<P>(net_counts_per_second: P, sensitivity: P) -> P
+/* Not sure that this is needed (TODO: uncomment or delete)
+pub fn counts_to_concentration<P>(net_counts_per_second: P, sensitivity: P) -> P
 where
     P: Float,
 {
     net_counts_per_second / sensitivity
 }
+*/
 
 /// Pack model description into a state vector
 /// rs, rn0(initial radon conc), exflow
@@ -546,18 +549,16 @@ impl<P: Float + std::fmt::Debug> DetectorInverseModel<P> {
         assert!(lp.is_finite());
 
         // Lognormal priors
-        /*
         let r_screen_scale_mu = P::one().ln();
         let r_screen_scale_sigma = P::from(self.inv_opts.r_screen_sigma).unwrap();
-        ln_prior = ln_prior
+        lprior = lprior
             + lognormal_ln_pdf(r_screen_scale_mu, r_screen_scale_sigma, r_screen_scale);
 
         // TODO: get exflow from data instead of from the parameters
         let exflow_scale_mu = P::one().ln();
         let exflow_sigma = P::from(self.inv_opts.exflow_sigma).unwrap();
-        ln_prior = ln_prior
+        lprior = lprior
             + lognormal_ln_pdf(exflow_scale_mu, exflow_sigma, exflow_scale);
-        */
 
         // Normal priors on parameters
         let r_screen_scale_mu = P::one();
@@ -1193,7 +1194,8 @@ mod tests {
         fit_inverse_model(p, inv_opts, ts).expect("Failed to fit inverse model");
     }
 
-    //#[test]
+    /*
+    #[test]
     fn handles_bad_input() {
         // Input is bad since counts < background count rate
         // causes expected counts to be less than zero
@@ -1218,6 +1220,7 @@ mod tests {
         let inv_opts = InversionOptionsBuilder::default().build().unwrap();
         fit_inverse_model(p, inv_opts, ts).expect("Failed to fit inverse model");
     }
+    */
 
     #[test]
     fn transforms() {
