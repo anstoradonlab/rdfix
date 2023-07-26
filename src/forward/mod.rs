@@ -35,7 +35,6 @@ use serde::{Deserialize, Serialize};
 //use ode_solvers::dop853::*;
 //use ode_solvers::*;
 pub mod constants;
-pub mod quickplot;
 pub mod stepper;
 use self::stepper::integrate;
 
