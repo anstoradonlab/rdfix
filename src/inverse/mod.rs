@@ -1,6 +1,7 @@
 mod generic_primitives;
 
 use std::collections::HashMap;
+use std::time::SystemTime;
 
 use crate::data::DataSet;
 use crate::data::GridVariable;
@@ -37,9 +38,6 @@ use argmin::solver::trustregion::TrustRegion;
 */
 
 pub use argmin::core::{CostFunction, Error, Executor, Gradient, Hessian, State};
-
-use argmin::core::observers::{ObserverMode, SlogLogger};
-
 use num::Float;
 
 use hammer_and_sample::{sample, MinChainLen, Model, Parallel};
@@ -62,6 +60,11 @@ use autodiff::*;
 extern crate blas_src;
 
 pub const NUM_VARYING_PARAMETERS: usize = 2;
+
+/// Return a seed for PRNG
+fn get_seed() -> usize{
+    SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs() as usize
+}
 
 // Transform a variable defined over [0,1] to a variable defined over [-inf, +inf]
 fn transform_constrained_to_unconstrained(x: f64) -> f64 {
@@ -310,6 +313,10 @@ pub struct InversionOptions {
     /// Maximum number of iterations when searching for MAP
     #[builder(default = "50000")]
     pub map_search_iterations: u64,
+    /// Random seed for repeatable experiments
+    #[builder(default = "None")]
+    pub random_seed: Option<usize>,
+    
     /// Options for the EMCEE sampler
     #[builder(default = "EmceeOptionsBuilder::default().build().unwrap()")]
     pub emcee: EmceeOptions,
@@ -341,6 +348,10 @@ pub struct NutsOptions {
 /// Configuration options for EMCEE sampler
 #[derive(Debug, Clone, Serialize, Deserialize, Builder, Copy)]
 pub struct EmceeOptions {
+    /// Number of burn-in EMCEE samples
+    #[builder(default = "1000")]
+    pub burn_in: usize,
+
     /// Number of EMCEE samples
     #[builder(default = "1000")]
     pub samples: usize,
@@ -383,25 +394,30 @@ impl Model for DetectorInverseModel<f64> {
 impl DetectorInverseModel<f64> {
     pub fn emcee_sample(
         &self,
-        num_samples: usize,
-        num_walkers: usize,
-        seed: usize,
+        inv_opts: InversionOptions,
     ) -> Result<Vec<GridVariable>, anyhow::Error> {
-        let num_burn_in_samples = 100;
-
+        let num_burn_in_samples = inv_opts.emcee.burn_in;
+        let num_samples = inv_opts.emcee.samples;
         let dim = self.ts.len() + NUM_VARYING_PARAMETERS;
+        let thin = inv_opts.emcee.thin;
+        // num walkers -- ensure it's a multiple of 2
+        let num_walkers = {
+            let mut x = dim * inv_opts.emcee.walkers_per_dim;
+            if x % 2 != 0 {
+                x += 1;
+            }
+            x
+        };
+        let seed = inv_opts.random_seed.unwrap_or(get_seed());
 
         // Burn in samples
         let walkers = ((seed)..(num_walkers + seed)).map(|seed| {
             let mut rng = Pcg64::seed_from_u64(seed.try_into().unwrap());
-
-            //let p = rng.gen_range(-1.0..=1.0);
             let p = (0..dim).map(|_| rng.gen_range(-1.0..=1.0)).collect();
-
             (p, rng)
         });
 
-        println!("Burn in...");
+        info!("EMCEE running {} burn-in iterations", num_burn_in_samples);
         let (burn_in_chain, _accepted) = sample(
             self,
             walkers,
@@ -413,15 +429,13 @@ impl DetectorInverseModel<f64> {
         let walkers = (0..num_walkers).map(|ii_walker| {
             let seed = ii_walker + seed + num_walkers;
             let rng = Pcg64::seed_from_u64(seed.try_into().unwrap());
-
             let p = (0..dim)
                 .map(|ii| burn_in_chain[burn_in_chain.len() - 1 - ii_walker][ii])
                 .collect();
-
             (p, rng)
         });
 
-        println!("Sampling...");
+        info!("EMCEE running {} sampling iterations", num_samples);
         let (chain, accepted) = sample(
             self,
             walkers,
@@ -437,12 +451,13 @@ impl DetectorInverseModel<f64> {
         println!("shape: {}, {}", chain.len(), chain[0].len());
         println!("organising chains");
 
-        let mut samples = Array3::<f64>::zeros((dim, num_walkers, num_samples));
-        for ii in 0..num_samples {
+        let num_samples_thin = num::integer::div_ceil(num_samples, thin);
+        let mut samples = Array3::<f64>::zeros((dim, num_walkers, num_samples_thin));
+        for ii in (0..num_samples).step_by(thin) {
             for jj in 0..num_walkers {
                 let idx = ii * num_walkers + jj;
                 for kk in 0..dim {
-                    samples[[kk, jj, ii]] = chain[idx][kk]
+                    samples[[kk, jj, ii/thin]] = chain[idx][kk]
                 }
             }
         }
@@ -937,45 +952,32 @@ pub fn fit_inverse_model(
 
         if let Err(e) = &res {
             error!("Error during MAP search: {}", e);
+            None
+        } else {
+            let res = res.unwrap();
+            let map = res.state.get_best_param().unwrap();
+            let map_vec = map.clone().to_vec();
+            let v = map_vec.as_slice();
+            let (transformed_r_screen_scale, transformed_exflow_scale, transformed_map_radon) =
+                unpack_state_vector(&v, &inv_opts);
+
+            let _r_screen_scale = transformed_r_screen_scale.exp();
+            let _exflow_scale = transformed_exflow_scale.exp();
+            let map_radon: Vec<_> = transformed_map_radon
+                .iter()
+                .map(|x| x.exp() * mean_radon)
+                .collect();
+
+            data.push(GridVariable::new_from_parts(
+                ArrayD::from_shape_vec(vec![map_radon.len()], map_radon.clone())?,
+                "map_radon",
+                &["time"],
+                None,
+            ));
+            // TODO: log MAP radon, r_screen_scale, exflow_scale
+            Some(map_radon)
         }
-        let res = res.unwrap();
-
-        println!("{res}");
-
-        //println!("MAP optimisation complete: {}", res);
-        let map = res.state.get_best_param().unwrap();
-
-        //println!("Best params: {:?}", map);
-
-        //let map_vec = map.clone().into_raw_vec();
-
-        let map_vec = map.clone().to_vec();
-        let v = map_vec.as_slice();
-        let (transformed_r_screen_scale, transformed_exflow_scale, transformed_map_radon) =
-            unpack_state_vector(&v, &inv_opts);
-
-        let r_screen_scale = transformed_r_screen_scale.exp();
-        let exflow_scale = transformed_exflow_scale.exp();
-
-        println!("r_screen scale factor: {r_screen_scale}, exflow scale factor: {exflow_scale}");
-
-        //
-        dbg!(transformed_map_radon);
-
-        let map_radon: Vec<_> = transformed_map_radon
-            .iter()
-            .map(|x| x.exp() * mean_radon)
-            .collect();
-
-        data.push(GridVariable::new_from_parts(
-            ArrayD::from_shape_vec(vec![map_radon.len()], map_radon.clone())?,
-            "map_radon",
-            &["time"],
-            None,
-        ));
-        Some(map_radon)
-    }
-    else {
+    } else {
         None
     };
 
@@ -987,15 +989,7 @@ pub fn fit_inverse_model(
 
     // EMCEE samples
     let inverse_model_f64 = inverse_model.into_inner_type::<f64>();
-    // num walkers -- ensure it's a multiple of 2
-    let num_walkers = {
-        let mut x = (npts + 2) * 3;
-        if x % 2 != 0 {
-            x += 1;
-        }
-        x
-    };
-    let sampler_output = inverse_model_f64.emcee_sample(1000, num_walkers, 42)?;
+    let sampler_output = inverse_model_f64.emcee_sample(inv_opts)?;
 
     // inverse_transform_radon_concs(&mut map_radon).unwrap();
 

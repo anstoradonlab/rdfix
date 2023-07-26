@@ -21,8 +21,17 @@ fn create_template(cmd_args: &TemplateArgs) -> Result<()> {
     let ts = get_test_timeseries(48 * 3);
     let mut f = File::create(&fname)?;
     write_csv(&mut f, ts)?;
-    let config = AppConfigBuilder::default().build().unwrap();
+    let mut config = AppConfigBuilder::default().build().unwrap();
+    match cmd_args.template_kind {
+        TemplateKind::Default => {}
+        TemplateKind::Small => {
+            config.inversion.map_search_iterations = 100;
+            config.inversion.emcee.burn_in = 100;
+            config.inversion.emcee.samples = 100;
+        }
+    }
     let config_str = toml::to_string(&config).unwrap();
+    dbg!(&config_str);
 
     let config_fname = cmd_args.template_dir.clone().join("config.toml");
     info!(
