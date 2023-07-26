@@ -12,6 +12,14 @@ pub struct AppConfig {
 
     #[builder(default = "InversionOptionsBuilder::default().build().unwrap()")]
     pub inversion: InversionOptions,
+
+    #[builder(default = "NutsOptionsBuilder::default().build().unwrap()")]
+    pub nuts: NutsOptions,
+
+    #[builder(default = "EmceeOptionsBuilder::default().build().unwrap()")]
+    pub emcee: EmceeOptions,
+
+
 }
 
 /// Configuration options for No U-Turn Sampler
@@ -19,12 +27,31 @@ pub struct AppConfig {
 pub struct NutsOptions {
     /// Number of NUTS samples
     #[builder(default = "1000")]
-    pub nuts_samples: usize,
+    pub samples: usize,
+
+    /// The thinning factor, i.e. the number of samples to skip in the output
+    #[builder(default = "30")]
+    pub thin: usize,
+    
 }
 
 /// Configuration options for EMCEE sampler
 #[derive(Debug, Clone, Serialize, Deserialize, Builder)]
-pub struct EmceeOptions {}
+pub struct EmceeOptions {
+        /// Number of EMCEE samples
+        #[builder(default = "1000")]
+        pub samples: usize,
+    
+        /// Number of walkers per dimension
+        #[builder(default = "3")]
+        pub walkers_per_dim: usize,
+
+        /// The thinning factor, i.e. the number of samples to skip in the output
+        #[builder(default = "30")]
+        pub thin: usize,
+
+
+}
 
 #[cfg(test)]
 mod tests {

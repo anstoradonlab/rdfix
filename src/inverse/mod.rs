@@ -2,6 +2,8 @@ mod generic_primitives;
 
 use std::collections::HashMap;
 
+use crate::appconfig::EmceeOptions;
+use crate::appconfig::NutsOptions;
 use crate::data::DataSet;
 use crate::data::GridVariable;
 
@@ -297,6 +299,17 @@ pub struct InversionOptions {
     // TODO: proper default value
     #[builder(default = "0.01")]
     pub exflow_sigma: f64,
+    /// MCMC sampling strategy
+    #[builder(default = "SamplerKind::Emcee")]
+    pub sampler_kind: SamplerKind
+}
+
+#[derive(Debug,Clone,Copy,Serialize, Deserialize)]
+pub enum SamplerKind{
+    /// Use the EMCEE MCMC sampling method
+    Emcee,
+    /// Use the NUTS MCMC sampling method
+    Nuts,
 }
 
 #[derive(Debug, Clone)]
