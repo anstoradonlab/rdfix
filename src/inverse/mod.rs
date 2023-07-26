@@ -2,8 +2,6 @@ mod generic_primitives;
 
 use std::collections::HashMap;
 
-use crate::appconfig::EmceeOptions;
-use crate::appconfig::NutsOptions;
 use crate::data::DataSet;
 use crate::data::GridVariable;
 
@@ -301,7 +299,16 @@ pub struct InversionOptions {
     pub exflow_sigma: f64,
     /// MCMC sampling strategy
     #[builder(default = "SamplerKind::Emcee")]
-    pub sampler_kind: SamplerKind
+    pub sampler_kind: SamplerKind,
+    /// Should the MAP be reported?
+    #[builder(default = "true")]
+    pub report_map: bool,
+    /// Options for the EMCEE sampler
+    #[builder(default = "EmceeOptionsBuilder::default().build().unwrap()")]
+    pub emcee: EmceeOptions,
+    /// Options for NUTS
+    #[builder(default = "NutsOptionsBuilder::default().build().unwrap()")]
+    pub nuts: NutsOptions,
 }
 
 #[derive(Debug,Clone,Copy,Serialize, Deserialize)]
@@ -311,6 +318,39 @@ pub enum SamplerKind{
     /// Use the NUTS MCMC sampling method
     Nuts,
 }
+
+
+/// Configuration options for No U-Turn Sampler
+#[derive(Debug, Clone, Serialize, Deserialize, Builder, Copy)]
+pub struct NutsOptions {
+    /// Number of NUTS samples
+    #[builder(default = "1000")]
+    pub samples: usize,
+
+    /// The thinning factor, i.e. the number of samples to skip in the output
+    #[builder(default = "30")]
+    pub thin: usize,
+    
+}
+
+/// Configuration options for EMCEE sampler
+#[derive(Debug, Clone, Serialize, Deserialize, Builder, Copy)]
+pub struct EmceeOptions {
+        /// Number of EMCEE samples
+        #[builder(default = "1000")]
+        pub samples: usize,
+    
+        /// Number of walkers per dimension
+        #[builder(default = "3")]
+        pub walkers_per_dim: usize,
+
+        /// The thinning factor, i.e. the number of samples to skip in the output
+        #[builder(default = "30")]
+        pub thin: usize,
+
+
+}
+
 
 #[derive(Debug, Clone)]
 pub struct DetectorInverseModel<P>
@@ -821,8 +861,18 @@ pub fn fit_inverse_model(
     let time_step = 60.0 * 30.0; //TODO
     let time_step_diff = FT::<f64>::cst(time_step);
 
+    // Data, which will output at the end of the function
+    let mut data: Vec<GridVariable> = vec![];
+
     // Radon concentration, simple calculation without deconvolution
     let initial_radon = calc_radon_without_deconvolution(&ts, time_step);
+
+    data.push(GridVariable::new_from_parts(
+        ArrayD::from_shape_vec(vec![initial_radon.len()], initial_radon.clone())?,
+        "undeconvolved_radon",
+        &["time"],
+        None,
+    ));
 
     // Scale by mean value and take log so that values take the range -inf,+inf
     // with most values around zero
@@ -1006,8 +1056,6 @@ pub fn fit_inverse_model(
 
 
     ******************/
-
-    let mut data: Vec<GridVariable> = vec![];
 
     data.push(GridVariable::new_from_parts(
         ArrayD::from_shape_vec(vec![map_radon.len()], map_radon)?,
