@@ -4,15 +4,12 @@ use std::fs::File;
 
 use anyhow::Result;
 
-use autodiff::FT;
-
 use crate::appconfig::AppConfigBuilder;
+use crate::inverse::fit_inverse_model;
 use crate::{cmdline::*, read_csv};
-use crate::forward::DetectorParamsBuilder;
-use crate::inverse::{fit_inverse_model, InversionOptionsBuilder};
 use crate::{get_test_timeseries, write_csv};
 
-use crate::{InputRecord, InputTimeSeries};
+use crate::InputTimeSeries;
 
 use log::info;
 
@@ -56,9 +53,9 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
     }
 
     let p = config.detector.clone();
-    let inv_opts = config.inversion.clone();
+    let inv_opts = config.inversion;
 
-    let fit_results = fit_inverse_model(p.clone(), inv_opts.clone(), ts.clone())?;
+    let fit_results = fit_inverse_model(p.clone(), inv_opts, ts.clone())?;
     fit_results.to_netcdf("test_results_todo.nc".into())?;
 
     Ok(())
@@ -69,7 +66,7 @@ pub fn main_body(program_args: RdfixArgs) -> Result<()> {
         Commands::Template(cmd_args) => {
             create_template(cmd_args)?;
         }
-        Commands::Deconv(cmd_args) => run_deconvolution(&cmd_args)?,
+        Commands::Deconv(cmd_args) => run_deconvolution(cmd_args)?,
     }
     Ok(())
 }
@@ -78,20 +75,19 @@ pub fn main_body(program_args: RdfixArgs) -> Result<()> {
 mod tests {
     use super::*;
     use clap::Parser;
-    use tempfile::tempdir;
     use std::env;
+    use tempfile::tempdir;
 
     /// Tests the whole program by running the top-level function as if it has been
     /// run from the commmand line.  First generate a test case from the "small" template
     /// then execute it
     #[test]
     fn run_cli() {
-
         if env::var("RUST_LOG").is_err() {
             env::set_var("RUST_LOG", "info")
         }
         env_logger::init();
-    
+
         let dir_input = tempdir().unwrap();
         let dir_output = tempdir().unwrap();
 
@@ -105,7 +101,6 @@ mod tests {
         let program_args: RdfixArgs = RdfixArgs::parse_from(cmdline);
         dbg!(&program_args);
         main_body(program_args).unwrap();
-
 
         let config_fname = dir_input.path().join("config.toml");
         let input_fname = dir_input.path().join("raw-data.csv");

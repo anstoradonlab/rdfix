@@ -13,8 +13,7 @@ pub struct RdfixArgs {
 
 fn get_default_dir() -> PathBuf {
     //let path = env::current_dir().unwrap();
-    let path = PathBuf::from(".");
-    path
+    PathBuf::from(".")
 }
 
 /* Maybe create this function?

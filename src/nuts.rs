@@ -50,18 +50,15 @@ impl PosteriorDensity {
             .expect("Failed to build detector model");
         let inverse_model: DetectorInverseModel<F1> = DetectorInverseModel {
             p: p_diff,
-            inv_opts: inv_opts,
-            ts: ts,
-            fwd: fwd,
+            inv_opts,
+            ts,
+            fwd,
         };
 
         // TODO: don't hard code the number of non-radon parameters (here, it's 2)
         let dim: usize = initial_radon.len() + 2;
 
-        PosteriorDensity {
-            inverse_model: inverse_model,
-            dim: dim,
-        }
+        PosteriorDensity { inverse_model, dim }
     }
 }
 
@@ -114,11 +111,10 @@ impl CpuLogpFunc for DetectorInverseModel<F1> {
 
 impl DetectorInverseModel<F1> {
     pub fn nuts_sample(&self, _npts: usize, depth: Option<u64>) -> Result<(), anyhow::Error> {
-        // We get the default sampler arguments
-        let mut sampler_args = SamplerArgs::default();
-
-        // and modify as we like
-        sampler_args.num_tune = 1000;
+        let mut sampler_args = SamplerArgs {
+            num_tune: 1000,
+            ..Default::default()
+        };
         // maxdepth makes an enormous difference to runtime
         if let Some(maxdepth) = depth {
             sampler_args.maxdepth = maxdepth; // use a small value, e.g. 3 for testing...
@@ -162,11 +158,10 @@ impl DetectorInverseModel<F1> {
 }
 
 pub fn test(npts: usize, depth: Option<u64>) -> Result<()> {
-    // We get the default sampler arguments
-    let mut sampler_args = SamplerArgs::default();
-
-    // and modify as we like
-    sampler_args.num_tune = 1000;
+    let mut sampler_args = nuts_rs::SamplerArgs {
+        num_tune: 1000,
+        ..Default::default()
+    };
     // maxdepth makes an enormous difference to runtime
     if let Some(maxdepth) = depth {
         sampler_args.maxdepth = maxdepth; // use a small value, e.g. 3 for testing...

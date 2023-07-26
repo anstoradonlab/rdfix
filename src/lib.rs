@@ -17,7 +17,6 @@ use forward::constants::{REFERENCE_TIME, TIME_UNITS};
 use ndarray::ArrayView1;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::error::Error;
 use std::io::{Read, Write};
 
 #[macro_use]
@@ -62,10 +61,10 @@ mod custom_date_format {
     use chrono::NaiveDateTime;
     use serde::{self, Deserialize, Deserializer, Serializer};
 
-    const FORMAT1: &'static str = "%Y-%m-%d %H:%M:%S";
-    const FORMAT2: &'static str = "%Y-%m-%dT%H:%M:%S";
-    const FORMAT3: &'static str = "%Y-%m-%d %H:%M:%S%.f";
-    const FORMAT4: &'static str = "%Y-%m-%dT%H:%M:%S%.f";
+    const FORMAT1: &str = "%Y-%m-%d %H:%M:%S";
+    const FORMAT2: &str = "%Y-%m-%dT%H:%M:%S";
+    const FORMAT3: &str = "%Y-%m-%d %H:%M:%S%.f";
+    const FORMAT4: &str = "%Y-%m-%dT%H:%M:%S%.f";
 
     // The signature of a serialize_with function must follow the pattern:
     //
@@ -107,7 +106,7 @@ impl From<IoInputRecord> for InputRecord {
         // TODO: calculate properly
         let time = (itm.time - *REFERENCE_TIME).num_seconds() as f64;
         InputRecord {
-            time: time,
+            time,
             counts: itm.counts,
             background_count_rate: itm.background_count_rate,
             sensitivity: itm.sensitivity,
@@ -125,7 +124,7 @@ impl From<InputRecord> for IoInputRecord {
         let nanosecs = Duration::nanoseconds(((itm.time - itm.time.round()) * 1e9) as i64);
         let time: NaiveDateTime = *REFERENCE_TIME + secs + nanosecs;
         IoInputRecord {
-            time: time,
+            time,
             counts: itm.counts,
             background_count_rate: itm.background_count_rate,
             sensitivity: itm.sensitivity,

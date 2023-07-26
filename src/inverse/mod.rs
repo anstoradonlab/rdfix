@@ -65,6 +65,7 @@ pub const NUM_VARYING_PARAMETERS: usize = 2;
 fn transform_constrained_to_unconstrained(x: f64) -> f64 {
     const A: f64 = 0.0;
     const B: f64 = 1.0;
+    #[allow(clippy::let_and_return)]
     let y = if x == A {
         -f64::INFINITY
     } else if x == B {
@@ -88,6 +89,7 @@ fn transform_constrained_to_unconstrained(x: f64) -> f64 {
 fn transform_unconstrained_to_constrained(y: f64) -> f64 {
     const A: f64 = 0.0;
     const B: f64 = 1.0;
+    #[allow(clippy::let_and_return)]
     let x = A + (B - A) * logistic(y);
     x
 }
@@ -113,6 +115,7 @@ pub fn transform_radon_concs1(radon_conc: &mut [f64]) -> Result<()> {
     let mut acc = rnsum;
     let mut tmp_prev = rnsum.ln();
 
+    #[allow(clippy::needless_range_loop)]
     for ii in 0..(n - 1) {
         let tmp = radon_conc[ii];
         radon_conc[ii] = tmp_prev;
@@ -160,7 +163,7 @@ pub fn log2_usize(num: usize) -> usize {
     let mut tmp = num;
     let mut shift_count = 0;
     while tmp > 0 {
-        tmp = tmp >> 1;
+        tmp >>= 1;
         shift_count += 1;
     }
     shift_count - 1
@@ -196,6 +199,7 @@ where
 
     assert!(radon_conc.len() == params.len());
 
+    #[allow(clippy::manual_memcpy)]
     for ii in 0..params.len() {
         radon_conc[ii] = params[ii]; //transform_unconstrained_to_constrained(params[ii]/2.0);
     }
@@ -238,9 +242,7 @@ where
     }
     // ensured we used up all of the parameters
     assert_eq!(rp.len(), 0);
-    for ii in 0..npts {
-        p[ii] = a[ii];
-    }
+    p[..npts].copy_from_slice(&a[..npts]);
 
     Ok(())
 }
@@ -311,14 +313,13 @@ pub struct InversionOptions {
     pub nuts: NutsOptions,
 }
 
-#[derive(Debug,Clone,Copy,Serialize, Deserialize)]
-pub enum SamplerKind{
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum SamplerKind {
     /// Use the EMCEE MCMC sampling method
     Emcee,
     /// Use the NUTS MCMC sampling method
     Nuts,
 }
-
 
 /// Configuration options for No U-Turn Sampler
 #[derive(Debug, Clone, Serialize, Deserialize, Builder, Copy)]
@@ -330,27 +331,23 @@ pub struct NutsOptions {
     /// The thinning factor, i.e. the number of samples to skip in the output
     #[builder(default = "30")]
     pub thin: usize,
-    
 }
 
 /// Configuration options for EMCEE sampler
 #[derive(Debug, Clone, Serialize, Deserialize, Builder, Copy)]
 pub struct EmceeOptions {
-        /// Number of EMCEE samples
-        #[builder(default = "1000")]
-        pub samples: usize,
-    
-        /// Number of walkers per dimension
-        #[builder(default = "3")]
-        pub walkers_per_dim: usize,
+    /// Number of EMCEE samples
+    #[builder(default = "1000")]
+    pub samples: usize,
 
-        /// The thinning factor, i.e. the number of samples to skip in the output
-        #[builder(default = "30")]
-        pub thin: usize,
+    /// Number of walkers per dimension
+    #[builder(default = "3")]
+    pub walkers_per_dim: usize,
 
-
+    /// The thinning factor, i.e. the number of samples to skip in the output
+    #[builder(default = "30")]
+    pub thin: usize,
 }
-
 
 #[derive(Debug, Clone)]
 pub struct DetectorInverseModel<P>
@@ -390,7 +387,7 @@ impl DetectorInverseModel<f64> {
         let dim = self.ts.len() + NUM_VARYING_PARAMETERS;
 
         // Burn in samples
-        let walkers = ((0 + seed)..(num_walkers + seed)).map(|seed| {
+        let walkers = ((seed)..(num_walkers + seed)).map(|seed| {
             let mut rng = Pcg64::seed_from_u64(seed.try_into().unwrap());
 
             //let p = rng.gen_range(-1.0..=1.0);
@@ -708,17 +705,16 @@ impl<P: Float + std::fmt::Debug> DetectorInverseModel<P> {
     }
 
     /// Convert the inner type into NP and return a copy of DetectorInverseModel
-    fn into_inner_type<NP>(&self) -> DetectorInverseModel<NP>
+    fn into_inner_type<NP>(self) -> DetectorInverseModel<NP>
     where
         NP: Float + std::fmt::Debug,
     {
-        let model = DetectorInverseModel {
+        DetectorInverseModel {
             p: self.p.into_inner_type::<NP>(),
-            inv_opts: self.inv_opts.clone(),
+            inv_opts: self.inv_opts,
             ts: self.ts.clone(),
             fwd: self.fwd.into_inner_type::<NP>(),
-        };
-        model
+        }
     }
 }
 
@@ -912,9 +908,9 @@ pub fn fit_inverse_model(
         .expect("Failed to build detector model");
     let inverse_model: DetectorInverseModel<F<f64, f64>> = DetectorInverseModel {
         p: p_diff,
-        inv_opts: inv_opts,
+        inv_opts,
         ts: ts.clone(),
-        fwd: fwd,
+        fwd,
     };
 
     // 2. Optimisation (MAP)

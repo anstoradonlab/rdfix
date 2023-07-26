@@ -330,13 +330,13 @@ impl<P: Float + std::fmt::Debug> DetectorForwardModel<P> {
         let sensitivity_points = &self.sensitivity_points;
         let background_count_rate_points = &self.background_count_rate_points;
         //let q_external = stepwise_interpolation(ti, &q_external_points, tmax);
-        let q_external = interp.stepwise(&q_external_points);
+        let q_external = interp.stepwise(q_external_points);
         //let q_internal = stepwise_interpolation(ti, &q_internal_points, tmax);
-        let q_internal = interp.stepwise(&q_internal_points);
+        let q_internal = interp.stepwise(q_internal_points);
         //let sensitivity = linear_interpolation(ti, &sensitivity_points, tmax);
-        let sensitivity = interp.linear(&sensitivity_points);
+        let sensitivity = interp.linear(sensitivity_points);
         //let background_count_rate = linear_interpolation(ti, &background_count_rate_points, tmax);
-        let background_count_rate = interp.linear(&background_count_rate_points);
+        let background_count_rate = interp.linear(background_count_rate_points);
         // scale factors (used in inversion)
         assert!(self.p.exflow_scale >= P::zero());
         assert!(self.p.r_screen_scale >= P::zero());
@@ -468,6 +468,7 @@ impl<P: Float + std::fmt::Debug> DetectorForwardModel<P> {
 ///   alpha detection efficiency (eff), recoil probability
 ///
 #[inline(always)]
+#[allow(clippy::too_many_arguments)]
 fn calc_eff_and_recoil_prob<P: Float + std::fmt::Debug>(
     q: P,
     rs: P,
@@ -525,7 +526,7 @@ where
             sensitivity_points: vec_as::<_, NP>(&self.data.sensitivity),
             background_count_rate_points: vec_as::<_, NP>(&self.data.background_count_rate),
             time_step: NP::from(self.time_step).unwrap(),
-            radon: radon,
+            radon,
             integration_substeps: 60,
             inj_source_strength: NP::from(self.inj_source_strength).unwrap(),
             inj_begin: NP::from(self.inj_begin).unwrap(),
@@ -612,10 +613,10 @@ where
         let mut y_out = Vec::with_capacity(num_steps);
         for _ in 0..num_intervals {
             state[IDX_ACC_COUNTS] = P::zero();
-            integrate(&mut state, &self, t, t + dt, num_steps);
+            integrate(&mut state, self, t, t + dt, num_steps);
             // TODO: maybe just return the expected counts??
             expected_counts.push(state[IDX_ACC_COUNTS]);
-            y_out.push(state.clone());
+            y_out.push(state);
             t = t + dt;
         }
 
@@ -629,8 +630,8 @@ where
         Ok(expected_counts)
     }
 
-    pub fn analytical_solution(&self) -> () {}
-    pub fn radon(&mut self, _radon: &[f64]) -> () {}
+    pub fn analytical_solution(&self) {}
+    pub fn radon(&mut self, _radon: &[f64]) {}
 }
 
 #[cfg(test)]

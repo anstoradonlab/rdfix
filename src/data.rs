@@ -27,9 +27,9 @@ impl GridVariable {
         }
         GridVariable {
             name: name.to_owned(),
-            dimensions: dimensions,
-            data: data,
-            attr: attr,
+            dimensions,
+            data,
+            attr,
         }
     }
 }
@@ -43,6 +43,7 @@ impl DataSet {
     pub fn new() -> Self {
         DataSet { vars: vec![] }
     }
+
     pub fn new_from_variables(vars: Vec<GridVariable>) -> Self {
         // should this be a hash map?
         // let mut map = HashMap::new();
@@ -58,12 +59,7 @@ impl DataSet {
     }
 
     pub fn var_ref(&self, vname: &str) -> Option<&GridVariable> {
-        for v in self.vars.iter() {
-            if v.name == vname {
-                return Some(v);
-            }
-        }
-        None
+        self.vars.iter().find(|&v| v.name == vname)
     }
 
     pub fn all_dimensions(&self) -> Vec<(String, usize)> {
@@ -110,6 +106,12 @@ impl DataSet {
         }
 
         Ok(())
+    }
+}
+
+impl Default for DataSet {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

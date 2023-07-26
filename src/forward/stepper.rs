@@ -19,7 +19,7 @@ pub fn integrate<P>(
     let mut k4 = [P::zero(); NUM_STATE_VARIABLES];
     let mut ktmp = [P::zero(); NUM_STATE_VARIABLES];
 
-    let mut state_work = state.clone();
+    let mut state_work = *state;
 
     // Step definition is
     // y(n+1) = y(n) + 1/6 * (k1 + 2k2 + 2k3 + k4)
@@ -65,6 +65,7 @@ pub fn integrate<P>(
         t = t + h;
     }
 
+    #[allow(clippy::manual_memcpy)]
     for ii in 0..state.len() {
         state[ii] = state_work[ii];
     }

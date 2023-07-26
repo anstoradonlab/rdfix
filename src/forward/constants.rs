@@ -1,3 +1,4 @@
+#![allow(clippy::excessive_precision)]
 use chrono::prelude::*;
 use lazy_static::lazy_static;
 
