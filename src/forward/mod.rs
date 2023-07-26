@@ -639,7 +639,6 @@ mod tests {
 
     use super::*;
     use assert_approx_eq::assert_approx_eq;
-    use quickplot::draw_plot;
 
     #[test]
     fn can_create_params() {
@@ -822,6 +821,5 @@ mod tests {
         let num_counts = fwd.numerical_expected_counts().unwrap();
         println!("{:#?}", num_counts);
 
-        draw_plot(&num_counts[..], "test.svg").unwrap();
     }
 }

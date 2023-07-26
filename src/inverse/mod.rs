@@ -62,8 +62,11 @@ extern crate blas_src;
 pub const NUM_VARYING_PARAMETERS: usize = 2;
 
 /// Return a seed for PRNG
-fn get_seed() -> usize{
-    SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs() as usize
+fn get_seed() -> usize {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as usize
 }
 
 // Transform a variable defined over [0,1] to a variable defined over [-inf, +inf]
@@ -316,7 +319,7 @@ pub struct InversionOptions {
     /// Random seed for repeatable experiments
     #[builder(default = "None")]
     pub random_seed: Option<usize>,
-    
+
     /// Options for the EMCEE sampler
     #[builder(default = "EmceeOptionsBuilder::default().build().unwrap()")]
     pub emcee: EmceeOptions,
@@ -457,7 +460,7 @@ impl DetectorInverseModel<f64> {
             for jj in 0..num_walkers {
                 let idx = ii * num_walkers + jj;
                 for kk in 0..dim {
-                    samples[[kk, jj, ii/thin]] = chain[idx][kk]
+                    samples[[kk, jj, ii / thin]] = chain[idx][kk]
                 }
             }
         }
@@ -981,60 +984,19 @@ pub fn fit_inverse_model(
         None
     };
 
-    // NUTS samples
+    match inv_opts.sampler_kind{
+        SamplerKind::Emcee => {
+            let inverse_model_f64 = inverse_model.into_inner_type::<f64>();
+            let sampler_output = inverse_model_f64.emcee_sample(inv_opts)?;
+            data.extend(sampler_output);        
+        }
 
-    // use super::nuts::*;
-    // let samples = inverse_model.nuts_sample(2000, None)?;
-    // dbg!(samples);
+        SamplerKind::Nuts => {
+            let sampler_output = inverse_model.nuts_sample(2000, None)?;
+            // TODO data.extend(sampler_output);        
+        }
+    }
 
-    // EMCEE samples
-    let inverse_model_f64 = inverse_model.into_inner_type::<f64>();
-    let sampler_output = inverse_model_f64.emcee_sample(inv_opts)?;
-
-    // inverse_transform_radon_concs(&mut map_radon).unwrap();
-
-    //println!("Initial radon concentration: {:?}", initial_radon);
-    //println!("MAP radon concentration:     {:?}", map_radon);
-
-    /*
-    // 3. Generate initial guess around the MAP point
-
-    let nwalkers = 6 * ndims; // TODO, add to inv_opts
-    let walkers = (0..nwalkers).map(|seed| {
-        let mut rng = Pcg64::seed_from_u64(seed as u64);
-
-        let p = v
-            .iter()
-            .map(|p_i| p_i + rng.gen_range(-1e-6..=1.0e-6))
-            .collect();
-
-        (p, rng)
-    });
-
-    // 4. Run the emcee sampler
-    let ndim = v.len();
-    let niterations = 5000;
-
-    println!("Running MCMC");
-    //let mut sampler =
-    //    emcee::EnsembleSampler::new(nwalkers, ndim, &inverse_model).expect("creating sampler");
-
-    let (chain, accepted) = sample(&inverse_model, walkers, niterations * 2, &Serial);
-
-    // half of the iterations are burn-in
-    let chain = &chain[niterations * nwalkers..];
-
-    // samples are now in chain
-    // TODO: reshape into nsamples * nwalkers array
-    let acceptance_fraction = accepted as f64 / niterations as f64;
-
-    // 5. Wrangle the output and compute statistics
-    println!("Complete.  Acceptance fraction: {:?}", acceptance_fraction);
-
-
-    ******************/
-
-    data.extend(sampler_output);
     data.extend(ts.to_grid_vars());
 
     let ds = DataSet::new_from_variables(data);
@@ -1193,7 +1155,13 @@ mod tests {
     #[test]
     fn can_run_constant_inverse_problem() {
         let p = DetectorParamsBuilder::default().build().unwrap();
-        let inv_opts = InversionOptionsBuilder::default().build().unwrap();
+        let mut inv_opts = InversionOptionsBuilder::default()
+            .map_search_iterations(100)
+            .random_seed(Some(64))
+            .build()
+            .unwrap();
+        inv_opts.emcee.samples = 100;
+        inv_opts.emcee.burn_in = 100;
         let npts = 4;
         let ts = get_timeseries(npts);
         fit_inverse_model(p, inv_opts, ts).expect("Failed to fit inverse model");
@@ -1203,7 +1171,13 @@ mod tests {
     fn can_run_inverse_problem() {
         // TODO: set options for very small number of iterations
         let p = DetectorParamsBuilder::default().build().unwrap();
-        let inv_opts = InversionOptionsBuilder::default().build().unwrap();
+        let mut inv_opts = InversionOptionsBuilder::default()
+            .map_search_iterations(100)
+            .random_seed(Some(64))
+            .build()
+            .unwrap();
+        inv_opts.emcee.samples = 100;
+        inv_opts.emcee.burn_in = 100;
         let npts = 15;
         let mut ts = get_timeseries(npts);
         ts.counts[npts - 1] += 500.0;
