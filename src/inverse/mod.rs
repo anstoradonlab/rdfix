@@ -920,39 +920,6 @@ pub fn fit_inverse_model(
 
     // 2. Optimisation (MAP)
 
-    /*
-        let linesearch = MoreThuenteLineSearch::new().with_bounds(1e-10, 0.005)?.with_width_tolerance(1e-3)?;
-
-        /*
-        let linesearch = {
-            use argmin::solver::linesearch::condition::*;
-            let mut ls = BacktrackingLineSearch::new(ArmijoCondition::new(0.01f64).unwrap()).rho(0.5)?;
-            //let mut ls = BacktrackingLineSearch::new(WolfeCondition::new(0.0001f64, 0.1f64).unwrap()).rho(0.5)?;
-            //let mut ls = BacktrackingLineSearch::new(StrongWolfeCondition::new(0.0001f64, 0.1f64).unwrap()).rho(0.5)?;
-            ls.initial_step_length(0.01).unwrap();
-            ls
-        };
-        */
-
-        //let solver = SteepestDescent::new(linesearch);
-        let solver = BFGS::new(linesearch)
-            .with_tolerance_cost(1e-2)?
-            .with_tolerance_grad(1e-1)?;
-
-        let init_hessian: Array2<f64> = Array2::eye(init_param.len());
-
-        // Run solver
-        let res = Executor::new(inverse_model, solver)
-            .configure(|state| {
-                state
-                    .param(init_param)
-                    .max_iters(1000)
-                    .inv_hessian(init_hessian)
-            })
-            .add_observer(SlogLogger::term(), ObserverMode::Every(1))
-            .run();
-    */
-
     let _map_radon = if inv_opts.report_map {
         info!("Searching for MAP");
         let niter = inv_opts.map_search_iterations;
