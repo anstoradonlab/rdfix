@@ -7,6 +7,8 @@ use crate::data::GridVariable;
 
 use crate::inverse::generic_primitives::exp_transform;
 use crate::inverse::generic_primitives::lognormal_ln_pdf;
+use log::error;
+use log::info;
 use serde::{Deserialize, Serialize};
 
 use self::generic_primitives::{normal_ln_pdf, poisson_ln_pmf};
@@ -305,6 +307,9 @@ pub struct InversionOptions {
     /// Should the MAP be reported?
     #[builder(default = "true")]
     pub report_map: bool,
+    /// Maximum number of iterations when searching for MAP
+    #[builder(default = "50000")]
+    pub map_search_iterations: u64,
     /// Options for the EMCEE sampler
     #[builder(default = "EmceeOptionsBuilder::default().build().unwrap()")]
     pub emcee: EmceeOptions,
@@ -948,49 +953,64 @@ pub fn fit_inverse_model(
             .run();
     */
 
-    // COBYLA solver version
-    let cob_inverse_model = CobylaDetectorInverseModel(inverse_model.clone());
-    let solver = CobylaSolver::new(init_param.as_slice().unwrap().to_owned());
-    let res = Executor::new(cob_inverse_model, solver)
-        .configure(|state| {
-            let mut state = state.max_iters(5000); // set to 50_000
-            state.maxfun = 100_000;
-            state
-        })
-        .add_observer(SlogLogger::term(), ObserverMode::Every(100))
-        .run();
+    let _map_radon = if inv_opts.report_map {
+        info!("Searching for MAP");
+        let niter = inv_opts.map_search_iterations;
+        // COBYLA solver version
+        let cob_inverse_model = CobylaDetectorInverseModel(inverse_model.clone());
+        let solver = CobylaSolver::new(init_param.as_slice().unwrap().to_owned());
+        let res = Executor::new(cob_inverse_model, solver)
+            .configure(|state| {
+                let mut state = state.max_iters(niter); // set to 50_000
+                state.maxfun = i32::MAX;
+                state
+            })
+            //.add_observer(SlogLogger::term(), ObserverMode::Every(100))
+            .run();
 
-    if let Err(e) = &res {
-        println!("Error: {e}");
+        if let Err(e) = &res {
+            error!("Error during MAP search: {}", e);
+        }
+        let res = res.unwrap();
+
+        println!("{res}");
+
+        //println!("MAP optimisation complete: {}", res);
+        let map = res.state.get_best_param().unwrap();
+
+        //println!("Best params: {:?}", map);
+
+        //let map_vec = map.clone().into_raw_vec();
+
+        let map_vec = map.clone().to_vec();
+        let v = map_vec.as_slice();
+        let (transformed_r_screen_scale, transformed_exflow_scale, transformed_map_radon) =
+            unpack_state_vector(&v, &inv_opts);
+
+        let r_screen_scale = transformed_r_screen_scale.exp();
+        let exflow_scale = transformed_exflow_scale.exp();
+
+        println!("r_screen scale factor: {r_screen_scale}, exflow scale factor: {exflow_scale}");
+
+        //
+        dbg!(transformed_map_radon);
+
+        let map_radon: Vec<_> = transformed_map_radon
+            .iter()
+            .map(|x| x.exp() * mean_radon)
+            .collect();
+
+        data.push(GridVariable::new_from_parts(
+            ArrayD::from_shape_vec(vec![map_radon.len()], map_radon.clone())?,
+            "map_radon",
+            &["time"],
+            None,
+        ));
+        Some(map_radon)
     }
-    let res = res.unwrap();
-
-    println!("{res}");
-
-    //println!("MAP optimisation complete: {}", res);
-    let map = res.state.get_best_param().unwrap();
-
-    //println!("Best params: {:?}", map);
-
-    //let map_vec = map.clone().into_raw_vec();
-
-    let map_vec = map.clone().to_vec();
-    let v = map_vec.as_slice();
-    let (transformed_r_screen_scale, transformed_exflow_scale, transformed_map_radon) =
-        unpack_state_vector(&v, &inv_opts);
-
-    let r_screen_scale = transformed_r_screen_scale.exp();
-    let exflow_scale = transformed_exflow_scale.exp();
-
-    println!("r_screen scale factor: {r_screen_scale}, exflow scale factor: {exflow_scale}");
-
-    //
-    dbg!(transformed_map_radon);
-
-    let map_radon: Vec<_> = transformed_map_radon
-        .iter()
-        .map(|x| x.exp() * mean_radon)
-        .collect();
+    else {
+        None
+    };
 
     // NUTS samples
 
@@ -1052,13 +1072,6 @@ pub fn fit_inverse_model(
 
 
     ******************/
-
-    data.push(GridVariable::new_from_parts(
-        ArrayD::from_shape_vec(vec![map_radon.len()], map_radon)?,
-        "map_radon",
-        &["time"],
-        None,
-    ));
 
     data.extend(sampler_output);
     data.extend(ts.to_grid_vars());
