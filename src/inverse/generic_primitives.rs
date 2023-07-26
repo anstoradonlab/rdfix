@@ -1,6 +1,8 @@
 use num::Float;
 use std::f64;
 
+#[allow(clippy::excessive_precision)]
+
 #[allow(unused)]
 /// Constant value for `sqrt(2 * pi)`
 const SQRT_2PI: f64 = 2.5066282746310005024157652848110452530069867406099;

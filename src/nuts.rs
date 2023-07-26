@@ -89,7 +89,7 @@ impl CpuLogpFunc for PosteriorDensity {
         for (g_out, g) in grad.iter_mut().zip(gradient) {
             *g_out = g;
         }
-        return Ok(logp);
+        Ok(logp)
     }
 }
 
@@ -108,7 +108,7 @@ impl CpuLogpFunc for DetectorInverseModel<F1> {
         for (g_out, g) in grad.iter_mut().zip(gradient) {
             *g_out = g;
         }
-        return Ok(logp);
+        Ok(logp)
     }
 }
 

@@ -67,7 +67,7 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
 pub fn main_body(program_args: RdfixArgs) -> Result<()> {
     match &program_args.command {
         Commands::Template(cmd_args) => {
-            create_template(&cmd_args)?;
+            create_template(cmd_args)?;
         }
         Commands::Deconv(cmd_args) => run_deconvolution(&cmd_args)?,
     }

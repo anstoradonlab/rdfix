@@ -629,7 +629,7 @@ impl<P: Float + std::fmt::Debug> DetectorInverseModel<P> {
             if *u > hundred {
                 *u = hundred;
             } else if *u < -hundred {
-                *u = hundred;
+                *u = -hundred;
             }
         }
 
