@@ -40,6 +40,8 @@ pub struct InputRecord {
     pub q_external: f64,
     /// Air temperature inside detector, degrees C
     pub airt: f64,
+    /// Known radon concentration or NaN if missing, Bq/m3
+    pub radon_truth: f64,
 }
 
 /// A version of the InputRecord which can be used for IO - this
@@ -54,6 +56,14 @@ struct IoInputRecord {
     pub q_internal: f64,
     pub q_external: f64,
     pub airt: f64,
+    #[serde(default = "IoInputRecord::radon_truth_default")]
+    pub radon_truth: f64,
+}
+
+impl IoInputRecord{
+    const fn radon_truth_default() -> f64{
+        f64::NAN
+    }
 }
 
 // copy-paste from docs, https://serde.rs/custom-date-format.html, switching to NaiveDateTime objects
@@ -113,6 +123,7 @@ impl From<IoInputRecord> for InputRecord {
             q_internal: itm.q_internal,
             q_external: itm.q_external,
             airt: itm.airt,
+            radon_truth: itm.radon_truth,
         }
     }
 }
@@ -131,6 +142,7 @@ impl From<InputRecord> for IoInputRecord {
             q_internal: itm.q_internal,
             q_external: itm.q_external,
             airt: itm.airt,
+            radon_truth: itm.radon_truth,
         }
     }
 }
@@ -319,6 +331,7 @@ pub fn get_test_timeseries(npts: usize) -> InputRecordVec {
         q_internal: 0.1 / 60.0,
         q_external: 80.0 / 60.0 / 1000.0,
         airt: 21.0,
+        radon_truth: f64::NAN,
     };
     let mut ts = InputRecordVec::new();
     let mut t = 0.0;
@@ -385,14 +398,19 @@ mod tests {
         let mut outfile = Vec::new();
         write_csv(&mut outfile, ts).unwrap();
         let s = String::from_utf8(outfile.clone()).unwrap();
-        let expected = "time,counts,background_count_rate,sensitivity,q_internal,q_external,airt\n\
-        2000-01-01 00:00:00,1030.0,0.016666666666666666,0.5555555555555556,0.0016666666666666668,0.0013333333333333333,21.0\n\
-        2000-01-01 00:30:00,1030.0,0.016666666666666666,0.5555555555555556,0.0016666666666666668,0.0013333333333333333,21.0\n\
-        2000-01-01 01:00:00,1030.0,0.016666666666666666,0.5555555555555556,0.0016666666666666668,0.0013333333333333333,21.0\n\
-        2000-01-01 01:30:00,1030.0,0.016666666666666666,0.5555555555555556,0.0016666666666666668,0.0013333333333333333,21.0\n";
+        let expected = "time,counts,background_count_rate,sensitivity,q_internal,q_external,airt,radon_truth\n\
+        2000-01-01 00:00:00,1030.0,0.016666666666666666,0.5555555555555556,0.0016666666666666668,0.0013333333333333333,21.0,NaN\n\
+        2000-01-01 00:30:00,1030.0,0.016666666666666666,0.5555555555555556,0.0016666666666666668,0.0013333333333333333,21.0,NaN\n\
+        2000-01-01 01:00:00,1030.0,0.016666666666666666,0.5555555555555556,0.0016666666666666668,0.0013333333333333333,21.0,NaN\n\
+        2000-01-01 01:30:00,1030.0,0.016666666666666666,0.5555555555555556,0.0016666666666666668,0.0013333333333333333,21.0,NaN\n";
         assert_eq!(s, expected);
         dbg!(&s);
         println!("{}", s);
+
+        // Can we round-trip?
+        let mut outfile2 = Vec::new();
+        write_csv(&mut outfile2, read_csv(expected.as_bytes()).unwrap()).unwrap();
+        assert_eq!(outfile2, outfile);
 
         // Happy to read from both "T-delemited" and space delimited date strings, with/without decimal seconds
         let csvdata = "time,counts,background_count_rate,sensitivity,q_internal,q_external,airt\n\
@@ -406,6 +424,15 @@ mod tests {
         let data = read_csv(outfile.as_slice()).unwrap();
         dbg!(&data);
 
-        assert_eq!(&data, &parsed_data);
+        // This fails because of NaNs in the input and NaN is not equal to NaN
+        // assert_eq!(&data, &parsed_data);
+        // This also fails, but would be a possible nice solution (need to impl traits)
+        // assert_relative_eq!(&data, &parsed_data);
+        // so let's write it back into a text format and do the comparison there
+        let mut ser_data = Vec::new();
+        let mut ser_parsed_data = Vec::new();
+        write_csv(&mut ser_data, data).unwrap();
+        write_csv(&mut ser_parsed_data, parsed_data).unwrap();
+        assert_eq!(ser_data, ser_parsed_data);
     }
 }
