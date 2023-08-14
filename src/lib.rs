@@ -60,8 +60,8 @@ struct IoInputRecord {
     pub radon_truth: f64,
 }
 
-impl IoInputRecord{
-    const fn radon_truth_default() -> f64{
+impl IoInputRecord {
+    const fn radon_truth_default() -> f64 {
         f64::NAN
     }
 }
@@ -316,6 +316,16 @@ impl InputRecordVec {
             Some(HashMap::from([("units".to_owned(), "deg C".to_owned())])),
         );
         data.push(v);
+
+        if self.radon_truth.iter().any(|x| x.is_finite()) {
+            let v = GridVariable::new_from_parts(
+                ArrayView1::from(&self.radon_truth).into_owned().into_dyn(),
+                "radon_truth",
+                &["time"],
+                Some(HashMap::from([("units".to_owned(), "Bq/m3".to_owned())])),
+            );
+            data.push(v);
+        }
 
         //DataSet::new_from_variables(data)
         data
