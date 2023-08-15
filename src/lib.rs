@@ -15,14 +15,17 @@ use chrono::{prelude::*, Duration};
 use data::GridVariable;
 use forward::constants::{REFERENCE_TIME, TIME_UNITS};
 use ndarray::ArrayView1;
+use rand::prelude::Distribution;
 use serde::{Deserialize, Serialize};
+use statrs::distribution::Poisson;
 use std::collections::HashMap;
 use std::io::{Read, Write};
+use toml::value::Time;
 
 #[macro_use]
 extern crate soa_derive;
 
-#[derive(Debug, Clone, PartialEq, Copy, StructOfArray, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Copy, StructOfArray, Serialize, Deserialize)]
 #[soa_derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct InputRecord {
     /// Time measured in seconds since an arbitrary reference
@@ -42,6 +45,21 @@ pub struct InputRecord {
     pub airt: f64,
     /// Known radon concentration or NaN if missing, Bq/m3
     pub radon_truth: f64,
+}
+
+impl Default for InputRecord {
+    fn default() -> Self {
+        Self {
+            time: 0.0,
+            counts: 1000.0 + 30.0,
+            background_count_rate: 1.0 / 60.0,
+            sensitivity: 1000. / (3600.0 / 2.0),
+            q_internal: 0.1 / 60.0,
+            q_external: 80.0 / 60.0 / 1000.0,
+            airt: 21.0,
+            radon_truth: f64::NAN,
+        }
+    }
 }
 
 /// A version of the InputRecord which can be used for IO - this
@@ -333,25 +351,103 @@ impl InputRecordVec {
 }
 
 pub fn get_test_timeseries(npts: usize) -> InputRecordVec {
-    let trec = InputRecord {
-        time: 0.0,
-        counts: 1000.0 + 30.0,
-        background_count_rate: 1.0 / 60.0,
-        sensitivity: 1000. / (3600.0 / 2.0),
-        q_internal: 0.1 / 60.0,
-        q_external: 80.0 / 60.0 / 1000.0,
-        airt: 21.0,
-        radon_truth: f64::NAN,
-    };
-    let mut ts = InputRecordVec::new();
-    let mut t = 0.0;
-    let time_step = 60.0 * 30.0;
-    for _ in 0..npts {
-        ts.push(trec);
-        *ts.time.last_mut().unwrap() = t;
-        t += time_step;
+    TestTimeseries::new(npts, TimeseriesKind::Constant).ts()
+}
+
+#[derive(Default, Debug, Clone)]
+pub enum TimeseriesKind {
+    #[default]
+    Constant,
+    NoisyConstant {
+        value: f64,
+    },
+    HourLongCalibration {
+        low_value: f64,
+        high_value: f64,
+    },
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct TestTimeseries {
+    npts: usize,
+    trec: InputRecord,
+    kind: TimeseriesKind,
+}
+
+impl TestTimeseries {
+    pub fn new(n: usize, kind: TimeseriesKind) -> Self {
+        Self {
+            npts: n,
+            trec: InputRecord::default(),
+            kind: kind,
+        }
     }
-    ts
+
+    pub fn ts(&self) -> InputRecordVec {
+        let mut ts = InputRecordVec::new();
+        let mut t = 0.0;
+        let time_step = 60.0 * 30.0;
+        for _ in 0..self.npts {
+            let mut trec = self.trec.clone();
+            trec.time = t;
+            ts.push(trec);
+            t += time_step;
+        }
+
+        match self.kind {
+            TimeseriesKind::Constant => ts,
+            TimeseriesKind::NoisyConstant { value } => {
+                // Add Poisson noise to constant values
+                let expected_counts =
+                    (value / self.trec.sensitivity + self.trec.background_count_rate) * time_step;
+                let dist = Poisson::new(expected_counts).unwrap();
+                let mut rng = rand::thread_rng();
+
+                for itm in ts.counts.iter_mut() {
+                    *itm = dist.sample(&mut rng);
+                }
+                for itm in ts.radon_truth.iter_mut() {
+                    *itm = value;
+                }
+
+                ts
+            }
+            TimeseriesKind::HourLongCalibration {
+                low_value,
+                high_value,
+            } => {
+                // Add Poisson noise to constant values, with a
+                // low value (ambient) and high value (during cal)
+                let expected_counts_low =
+                    (low_value / self.trec.sensitivity + self.trec.background_count_rate) * time_step;
+                let expected_counts_high =
+                    (high_value / self.trec.sensitivity + self.trec.background_count_rate) * time_step;
+                let dist_low = Poisson::new(expected_counts_low).unwrap();
+                let dist_high = Poisson::new(expected_counts_high).unwrap();
+                let mut rng = rand::thread_rng();
+
+                let secs_per_day = 3600. * 24.;
+                let high_start = 12. * 3600.;
+                let high_end = 13. * 3600.;
+                for (itm, t) in ts.counts.iter_mut().zip(&ts.time) {
+                    if (t % secs_per_day) > high_start && (t % secs_per_day) <= high_end {
+                        *itm = dist_high.sample(&mut rng);
+                    } else {
+                        *itm = dist_low.sample(&mut rng);
+                    }
+                }
+                for (itm, t) in ts.radon_truth.iter_mut().zip(&ts.time) {
+                    if (t % secs_per_day) > high_start && (t % secs_per_day) <= high_end {
+                        *itm = high_value;
+                    } else {
+                        *itm = low_value;
+                    }
+                }
+
+                ts
+            }
+        }
+    }
 }
 
 // Generic version of this would like like this:
