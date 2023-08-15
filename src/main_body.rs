@@ -33,7 +33,7 @@ fn create_template(cmd_args: &TemplateArgs) -> Result<()> {
         TemplateKind::CalPeakOneDay => {
             ts = TestTimeseries::new(
                 48,
-                TimeseriesKind::HourLongCalibration {
+                TimeseriesKind::CalibrationPulse {
                     low_value: 1.0,
                     high_value: 100.0,
                 },
@@ -46,7 +46,7 @@ fn create_template(cmd_args: &TemplateArgs) -> Result<()> {
         TemplateKind::CalPeakMonth => {
             ts = TestTimeseries::new(
                 48 * 30,
-                TimeseriesKind::HourLongCalibration {
+                TimeseriesKind::CalibrationPulse {
                     low_value: 1.0,
                     high_value: 100.0,
                 },

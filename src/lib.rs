@@ -360,7 +360,7 @@ pub enum TimeseriesKind {
     NoisyConstant {
         value: f64,
     },
-    HourLongCalibration {
+    CalibrationPulse {
         low_value: f64,
         high_value: f64,
     },
@@ -411,32 +411,17 @@ impl TestTimeseries {
 
                 ts
             }
-            TimeseriesKind::HourLongCalibration {
+            TimeseriesKind::CalibrationPulse {
                 low_value,
                 high_value,
             } => {
                 // Add Poisson noise to constant values, with a
                 // low value (ambient) and high value (during cal)
-                let expected_counts_low = (low_value / self.trec.sensitivity
-                    + self.trec.background_count_rate)
-                    * time_step;
-                let expected_counts_high = (high_value / self.trec.sensitivity
-                    + self.trec.background_count_rate)
-                    * time_step;
-                let dist_low = Poisson::new(expected_counts_low).unwrap();
-                let dist_high = Poisson::new(expected_counts_high).unwrap();
                 let mut rng = rand::thread_rng();
 
                 let secs_per_day = 3600. * 24.;
-                let high_start = 12. * 3600.;
-                let high_end = 13. * 3600.;
-                for (itm, t) in ts.counts.iter_mut().zip(&ts.time) {
-                    if (t % secs_per_day) > high_start && (t % secs_per_day) <= high_end {
-                        *itm = dist_high.sample(&mut rng);
-                    } else {
-                        *itm = dist_low.sample(&mut rng);
-                    }
-                }
+                let high_start = 9. * 3600.;
+                let high_end = 14. * 3600.;
                 for (itm, t) in ts.radon_truth.iter_mut().zip(&ts.time) {
                     if (t % secs_per_day) > high_start && (t % secs_per_day) <= high_end {
                         *itm = high_value;
@@ -444,7 +429,18 @@ impl TestTimeseries {
                         *itm = low_value;
                     }
                 }
+                // run forward model
+                let fwd = crate::forward::DetectorForwardModelBuilder::<f64>::default()
+                .radon(ts.radon_truth.clone())
+                .data(ts.clone())
+                .time_step(time_step)
+                .build()
+                .unwrap();
+                let expected_counts = fwd.numerical_expected_counts().unwrap();
 
+                for (itm, ec) in ts.counts.iter_mut().zip(&expected_counts){
+                    *itm = Poisson::new(*ec).unwrap().sample(&mut rng);
+                }
                 ts
             }
         }
