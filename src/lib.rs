@@ -20,7 +20,6 @@ use serde::{Deserialize, Serialize};
 use statrs::distribution::Poisson;
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use toml::value::Time;
 
 #[macro_use]
 extern crate soa_derive;
@@ -418,10 +417,12 @@ impl TestTimeseries {
             } => {
                 // Add Poisson noise to constant values, with a
                 // low value (ambient) and high value (during cal)
-                let expected_counts_low =
-                    (low_value / self.trec.sensitivity + self.trec.background_count_rate) * time_step;
-                let expected_counts_high =
-                    (high_value / self.trec.sensitivity + self.trec.background_count_rate) * time_step;
+                let expected_counts_low = (low_value / self.trec.sensitivity
+                    + self.trec.background_count_rate)
+                    * time_step;
+                let expected_counts_high = (high_value / self.trec.sensitivity
+                    + self.trec.background_count_rate)
+                    * time_step;
                 let dist_low = Poisson::new(expected_counts_low).unwrap();
                 let dist_high = Poisson::new(expected_counts_high).unwrap();
                 let mut rng = rand::thread_rng();

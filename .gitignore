@@ -1,6 +1,7 @@
 /target
 .vscode
 /deconv-example
+/deconv-example-input
 test.nc
 test.svg
 test_results_todo.nc

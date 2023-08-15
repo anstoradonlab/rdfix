@@ -6,7 +6,7 @@ use anyhow::Result;
 
 use crate::appconfig::AppConfigBuilder;
 use crate::inverse::fit_inverse_model;
-use crate::{cmdline::*, read_csv};
+use crate::{cmdline::*, read_csv, TestTimeseries, TimeseriesKind};
 use crate::{get_test_timeseries, write_csv};
 
 use crate::InputTimeSeries;
@@ -18,9 +18,7 @@ fn create_template(cmd_args: &TemplateArgs) -> Result<()> {
 
     let fname = cmd_args.template_dir.clone().join("raw-data.csv");
     info!("Writing example data file to {}", fname.display());
-    let ts = get_test_timeseries(48 * 3);
-    let mut f = File::create(&fname)?;
-    write_csv(&mut f, ts)?;
+    let mut ts = get_test_timeseries(48 * 3);
     let mut config = AppConfigBuilder::default().build().unwrap();
     match cmd_args.template_kind {
         TemplateKind::Default => {}
@@ -29,7 +27,35 @@ fn create_template(cmd_args: &TemplateArgs) -> Result<()> {
             config.inversion.emcee.burn_in = 100;
             config.inversion.emcee.samples = 100;
         }
+        TemplateKind::ConstantOneDay => {
+            ts = TestTimeseries::new(48, TimeseriesKind::NoisyConstant { value: 1.0 }).ts()
+        }
+        TemplateKind::CalPeakOneDay => {
+            ts = TestTimeseries::new(
+                48,
+                TimeseriesKind::HourLongCalibration {
+                    low_value: 1.0,
+                    high_value: 100.0,
+                },
+            )
+            .ts()
+        }
+        TemplateKind::ConstantMonth => {
+            ts = TestTimeseries::new(48 * 30, TimeseriesKind::NoisyConstant { value: 1.0 }).ts()
+        }
+        TemplateKind::CalPeakMonth => {
+            ts = TestTimeseries::new(
+                48 * 30,
+                TimeseriesKind::HourLongCalibration {
+                    low_value: 1.0,
+                    high_value: 100.0,
+                },
+            )
+            .ts()
+        }
     }
+    let mut f = File::create(&fname)?;
+    write_csv(&mut f, ts)?;
     let config_str = toml::to_string(&config).unwrap();
     dbg!(&config_str);
 

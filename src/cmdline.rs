@@ -62,6 +62,14 @@ pub enum TemplateKind {
     Default,
     /// Small template using very few iterations for fast execution; this template will not generate valid results
     Small,
+    /// Constant radon concentration, but with Poisson noise on counts, one day of data
+    ConstantOneDay,
+    /// Hour-long calibration peak, one day of data
+    CalPeakOneDay,
+    /// Constant radon concentration, but with Poisson noise on counts, one month of data
+    ConstantMonth,
+    /// Hour-long calibration peak, one month of data
+    CalPeakMonth,
 }
 
 pub fn parse_cmdline() -> Result<RdfixArgs> {
