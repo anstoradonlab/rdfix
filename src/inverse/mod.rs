@@ -319,6 +319,10 @@ pub struct InversionOptions {
     /// Random seed for repeatable experiments
     #[builder(default = "None")]
     pub random_seed: Option<usize>,
+    /// Process the timeseries in chunks
+    /// (chunksize is 48 points plus 8 points of padding at each end)
+    #[builder(default = "true")]
+    pub process_in_chunks: bool,
 
     /// Options for the EMCEE sampler
     #[builder(default = "EmceeOptionsBuilder::default().build().unwrap()")]
@@ -958,6 +962,7 @@ pub fn fit_inverse_model(
             None
         } else {
             let res = res.unwrap();
+            info!("Finished searching for MAP.  Iterations: {}", res);
             let map = res.state.get_best_param().unwrap();
             let map_vec = map.clone().to_vec();
             let v = map_vec.as_slice();
@@ -984,16 +989,16 @@ pub fn fit_inverse_model(
         None
     };
 
-    match inv_opts.sampler_kind{
+    match inv_opts.sampler_kind {
         SamplerKind::Emcee => {
             let inverse_model_f64 = inverse_model.into_inner_type::<f64>();
             let sampler_output = inverse_model_f64.emcee_sample(inv_opts)?;
-            data.extend(sampler_output);        
+            data.extend(sampler_output);
         }
 
         SamplerKind::Nuts => {
-            let sampler_output = inverse_model.nuts_sample(2000, None)?;
-            // TODO data.extend(sampler_output);        
+            let _sampler_output = inverse_model.nuts_sample(2000, None)?;
+            // TODO data.extend(sampler_output);
         }
     }
 
@@ -1023,6 +1028,7 @@ mod tests {
             q_internal: 0.1 / 60.0,           //volumetric, m3/sec
             q_external: 80.0 / 60.0 / 1000.0, //volumetric, m3/sec
             airt: 21.0,                       // degC
+            radon_truth: f64::NAN,
         };
         let mut ts = InputRecordVec::new();
         for _ in 0..npts {

@@ -4,6 +4,8 @@ use autodiff::F1;
 use ndarray::{Array1, ArrayView1};
 
 pub use nuts_rs::{new_sampler, Chain, CpuLogpFunc, LogpError, SampleStats, SamplerArgs};
+use rand::SeedableRng;
+use rand_chacha::ChaCha8Rng;
 use thiserror::Error;
 
 use super::forward::{DetectorForwardModelBuilder, DetectorParams, DetectorParamsBuilder};
@@ -125,7 +127,8 @@ impl DetectorInverseModel<F1> {
 
         let chain = 0;
         let seed = 42;
-        let mut sampler = new_sampler(logp_func, sampler_args, chain, seed);
+        let mut rng = ChaCha8Rng::seed_from_u64(seed);
+        let mut sampler = new_sampler(logp_func, sampler_args, chain, &mut rng);
 
         // Set to some initial position and start drawing samples.
         // Note: it's not possible to use ? here because the NUTS error isn't Sync
@@ -137,13 +140,10 @@ impl DetectorInverseModel<F1> {
         for iter in 0..2000 {
             let (draw, info) = sampler.draw().expect("Unrecoverable error during sampling");
 
-            let _info_vec = info.to_vec(); // We can collect the stats in a Vec
-                                           // Or get more detailed information about divergences
             if let Some(div_info) = info.divergence_info() {
                 println!(
                     "Divergence on iteration {:?} at position {:?}",
-                    iter,
-                    div_info.start_location()
+                    iter, div_info.start_location
                 );
             }
             if iter % 100 == 0 {
@@ -177,7 +177,8 @@ pub fn test(npts: usize, depth: Option<u64>) -> Result<()> {
 
     let chain = 0;
     let seed = 42;
-    let mut sampler = new_sampler(logp_func, sampler_args, chain, seed);
+    let mut rng = ChaCha8Rng::seed_from_u64(seed);
+    let mut sampler = new_sampler(logp_func, sampler_args, chain, &mut rng);
 
     // Set to some initial position and start drawing samples.
     // Note: it's not possible to use ? here because the NUTS error isn't Sync
@@ -189,13 +190,10 @@ pub fn test(npts: usize, depth: Option<u64>) -> Result<()> {
     for iter in 0..2000 {
         let (draw, info) = sampler.draw().expect("Unrecoverable error during sampling");
 
-        let _info_vec = info.to_vec(); // We can collect the stats in a Vec
-                                       // Or get more detailed information about divergences
         if let Some(div_info) = info.divergence_info() {
             println!(
                 "Divergence on iteration {:?} at position {:?}",
-                iter,
-                div_info.start_location()
+                iter, div_info.start_location
             );
         }
         if iter % 100 == 0 {
