@@ -29,7 +29,12 @@ pub enum Commands {
     Template(TemplateArgs),
     /// Run deconvolution
     Deconv(DeconvArgs),
+    /// Run forward model
+    Forward(DeconvArgs),
 }
+
+// Currently, forward model takes the same arguments as deconvolution but we might
+// want to add FwdArgs in the future.
 
 #[derive(Args, Debug)]
 pub struct DeconvArgs {
@@ -44,6 +49,25 @@ pub struct DeconvArgs {
     /// Input files
     pub input_files: Vec<PathBuf>,
 }
+
+
+
+/*
+#[derive(Args, Debug)]
+pub struct FwdArgs {
+    /// Sets the output directory
+    #[arg(short, long, value_name = "OUTPUT_DIR", default_value=get_default_dir().join("deconv-output").into_os_string())]
+    pub output: PathBuf,
+
+    /// Input files
+    pub input_files: Vec<PathBuf>,
+}
+ */
+
+/*
+#[repr(transparent)]
+pub struct FwdArgs(DeconvArgs);
+ */
 
 #[derive(Args, Debug)]
 pub struct TemplateArgs {
@@ -96,7 +120,7 @@ pub fn parse_cmdline() -> Result<RdfixArgs> {
             }
         }
 
-        Commands::Deconv(args) => {
+        Commands::Deconv(args) | Commands::Forward(args) => {
             for fname in args.input_files.iter() {
                 if !fname.exists() {
                     return Err(anyhow!("Input file \"{0}\" not found", fname.display()));

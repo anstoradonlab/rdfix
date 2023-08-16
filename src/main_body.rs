@@ -102,6 +102,7 @@ pub fn main_body(program_args: RdfixArgs) -> Result<()> {
             create_template(cmd_args)?;
         }
         Commands::Deconv(cmd_args) => run_deconvolution(cmd_args)?,
+        Commands::Forward(_cmd_args) => todo!(),  // run a forward model
     }
     Ok(())
 }
