@@ -550,13 +550,12 @@ impl DetectorInverseModel<f64> {
 impl<P: Float + std::fmt::Debug> DetectorInverseModel<P> {
     /// Calculate a reference value for use when transforming radon timeseries
     /// Currently, this is just the mean radon concentration.
-    pub fn calc_radon_ref(&self) -> P{
-        let rn =
-            calc_radon_without_deconvolution(&self.ts, self.fwd.time_step.to_f64().unwrap());
+    pub fn calc_radon_ref(&self) -> P {
+        let rn = calc_radon_without_deconvolution(&self.ts, self.fwd.time_step.to_f64().unwrap());
         let rnavg: f64 = rn.iter().fold(0.0, |acc, e| acc + e) / (rn.len() as f64);
         P::from(rnavg).unwrap()
     }
-    
+
     pub fn lnprob_f64(&self, theta: &[f64]) -> f64 {
         let mut theta_p = Vec::<P>::with_capacity(theta.len());
         for itm in theta {

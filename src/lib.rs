@@ -431,14 +431,14 @@ impl TestTimeseries {
                 }
                 // run forward model
                 let fwd = crate::forward::DetectorForwardModelBuilder::<f64>::default()
-                .radon(ts.radon_truth.clone())
-                .data(ts.clone())
-                .time_step(time_step)
-                .build()
-                .unwrap();
+                    .radon(ts.radon_truth.clone())
+                    .data(ts.clone())
+                    .time_step(time_step)
+                    .build()
+                    .unwrap();
                 let expected_counts = fwd.numerical_expected_counts().unwrap();
 
-                for (itm, ec) in ts.counts.iter_mut().zip(&expected_counts){
+                for (itm, ec) in ts.counts.iter_mut().zip(&expected_counts) {
                     *itm = Poisson::new(*ec).unwrap().sample(&mut rng);
                 }
                 ts
