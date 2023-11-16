@@ -469,7 +469,6 @@ pub fn read_csv<R: Read>(file: R) -> Result<InputTimeSeries> {
         // deserialization.
         let row: IoInputRecord = result?;
         let row: InputRecord = row.into();
-        println!("{:?}", row);
         data.push(row);
     }
     Ok(data)
