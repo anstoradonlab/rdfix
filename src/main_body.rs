@@ -1,8 +1,10 @@
 /// These are the main top-level driver functions
 use std::fs;
 use std::fs::File;
+use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{Error, Result};
+use rayon::prelude::*;
 
 use crate::appconfig::AppConfigBuilder;
 use crate::inverse::fit_inverse_model;
@@ -12,6 +14,26 @@ use crate::{get_test_timeseries, write_csv};
 use crate::InputTimeSeries;
 
 use log::info;
+
+fn chunk_timeseries(
+    ts: &InputTimeSeries,
+    chunksize: usize,
+    overlapsize: usize,
+) -> Result<Vec<InputTimeSeries>> {
+    let totalsize = chunksize + 2 * overlapsize;
+    if ts.len() <= totalsize {
+        return Ok(vec![ts.clone()]);
+    }
+    let mut chunks: Vec<InputTimeSeries> = vec![];
+    let mut i1 = 0;
+    let mut i2 = i1 + totalsize;
+    while i2 < ts.len() {
+        chunks.push(ts.slice(i1..i2).to_vec());
+        i1 += chunksize;
+        i2 += chunksize;
+    }
+    Ok(chunks)
+}
 
 fn create_template(cmd_args: &TemplateArgs) -> Result<()> {
     info!("Writing template to {}", cmd_args.template_dir.display());
@@ -66,8 +88,9 @@ fn create_template(cmd_args: &TemplateArgs) -> Result<()> {
     );
     fs::write(&config_fname, config_str)?;
 
-    let output_fname = cmd_args.template_dir.clone().join("deconv-output");
-    println!("Template created.  Perform a test by running:\n> rdfix-deconvolve deconv --config {} --output {} {}", config_fname.display(), output_fname.display(), fname.display());
+    let output_dir = cmd_args.template_dir.clone().join("deconv-output");
+    fs::create_dir_all(&output_dir)?;
+    println!("Template created.  Perform a test by running:\n> rdfix-deconvolve deconv --config {} --output {} {}", config_fname.display(), output_dir.display(), fname.display());
 
     Ok(())
 }
@@ -89,9 +112,47 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
 
     let p = config.detector.clone();
     let inv_opts = config.inversion;
+    let mut chunks = vec![];
+    if config.inversion.process_in_chunks {
+        chunks.extend(chunk_timeseries(
+            &ts,
+            config.inversion.chunksize,
+            config.inversion.overlapsize,
+        )?);
+    } else {
+        chunks.push(ts);
+    }
 
-    let fit_results = fit_inverse_model(p.clone(), inv_opts, ts.clone())?;
-    fit_results.to_netcdf("test_results_todo.nc".into())?;
+    // This is the same as the code block, below, but without
+    //for (count, ts_chunk) in chunks.into_iter().enumerate(){
+    //    let fit_results = fit_inverse_model(p.clone(), inv_opts, ts_chunk.clone())?;
+    //    let output_fname = cmd_args.output.join(format!("chunk-{count}.nc"));
+    //    fit_results.to_netcdf(output_fname)?;
+    //}
+
+    let results: Result<Vec<PathBuf>, Error> = chunks
+        .into_par_iter()
+        .enumerate()
+        .map(|(count, ts_chunk)| {
+            let fit_results = fit_inverse_model(p.clone(), inv_opts, ts_chunk.clone())?;
+            let output_fname = cmd_args.output.join(format!("chunk-{count}.nc"));
+            fit_results.to_netcdf(output_fname.clone())?;
+            Ok::<PathBuf, anyhow::Error>(output_fname)
+        })
+        .collect();
+
+    let processed_fnames = match results {
+        Ok(value) => value,
+        Err(e) => return Err(e),
+    };
+
+    println!(
+        "Processed these files: {:?}",
+        processed_fnames
+            .iter()
+            .map(|itm| itm.display())
+            .collect::<Vec<_>>()
+    );
 
     Ok(())
 }
@@ -102,7 +163,7 @@ pub fn main_body(program_args: RdfixArgs) -> Result<()> {
             create_template(cmd_args)?;
         }
         Commands::Deconv(cmd_args) => run_deconvolution(cmd_args)?,
-        Commands::Forward(_cmd_args) => todo!(),  // run a forward model
+        Commands::Forward(_cmd_args) => todo!(), // run a forward model
     }
     Ok(())
 }
@@ -150,7 +211,6 @@ mod tests {
             input_fname.to_str().unwrap(),
         ];
         let program_args: RdfixArgs = RdfixArgs::parse_from(cmdline);
-        dbg!(&program_args);
         main_body(program_args).unwrap();
     }
 }

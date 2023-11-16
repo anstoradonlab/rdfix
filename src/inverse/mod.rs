@@ -323,7 +323,12 @@ pub struct InversionOptions {
     /// (chunksize is 48 points plus 8 points of padding at each end)
     #[builder(default = "true")]
     pub process_in_chunks: bool,
-
+    /// Size of chunks to use, not including overlapping padding
+    #[builder(default = "48")]
+    pub chunksize: usize,
+    /// Number of points of overlap at each end of the chunks
+    #[builder(default = "8")]
+    pub overlapsize: usize,
     /// Options for the EMCEE sampler
     #[builder(default = "EmceeOptionsBuilder::default().build().unwrap()")]
     pub emcee: EmceeOptions,
@@ -408,7 +413,7 @@ impl DetectorInverseModel<f64> {
         let dim = self.ts.len() + NUM_VARYING_PARAMETERS;
         let thin = inv_opts.emcee.thin;
         // num walkers -- ensure it's a multiple of 2
-        let num_walkers = {
+        let num_walkers: usize = {
             let mut x = dim * inv_opts.emcee.walkers_per_dim;
             if x % 2 != 0 {
                 x += 1;
@@ -494,7 +499,11 @@ impl DetectorInverseModel<f64> {
 
         let r_screen_scale_samples = samples.slice(s![0, .., ..]);
         let exflow_scale_samples = samples.slice(s![1, .., ..]);
-        let radon_samples = samples.slice(s![2.., .., ..]);
+        let transformed_radon_samples = samples.slice(s![2.., .., ..]);
+
+        // inverse transform
+        let radon_ref = self.calc_radon_ref();
+        let radon_samples = transformed_radon_samples.map(|x| x.exp() * radon_ref);
 
         // Convert to variables with metadata
         let r_screen_scale_samples = GridVariable::new_from_parts(
@@ -539,6 +548,15 @@ impl DetectorInverseModel<f64> {
 }
 
 impl<P: Float + std::fmt::Debug> DetectorInverseModel<P> {
+    /// Calculate a reference value for use when transforming radon timeseries
+    /// Currently, this is just the mean radon concentration.
+    pub fn calc_radon_ref(&self) -> P{
+        let rn =
+            calc_radon_without_deconvolution(&self.ts, self.fwd.time_step.to_f64().unwrap());
+        let rnavg: f64 = rn.iter().fold(0.0, |acc, e| acc + e) / (rn.len() as f64);
+        P::from(rnavg).unwrap()
+    }
+    
     pub fn lnprob_f64(&self, theta: &[f64]) -> f64 {
         let mut theta_p = Vec::<P>::with_capacity(theta.len());
         for itm in theta {
@@ -657,14 +675,7 @@ impl<P: Float + std::fmt::Debug> DetectorInverseModel<P> {
             }
         }
 
-        // Calculate physical radon values
-        // TODO: FIXME, this calculation could go elsewhere
-        let radon_reference_value = {
-            let rn =
-                calc_radon_without_deconvolution(&self.ts, self.fwd.time_step.to_f64().unwrap());
-            let rnavg: f64 = rn.iter().fold(0.0, |acc, e| acc + e) / (rn.len() as f64);
-            P::from(rnavg).unwrap()
-        };
+        let radon_reference_value = self.calc_radon_ref();
 
         let radon: Vec<_> = radon_transformed
             .iter()
