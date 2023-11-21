@@ -930,7 +930,7 @@ pub fn fit_inverse_model(
     // Define initial parameter vector and cost function
 
     //println!("Initial radon concentration: {:?}", initial_radon);
-    println!("Initial radon scaled: {:?}", initial_radon_scaled);
+    //println!("Initial radon scaled: {:?}", initial_radon_scaled);
     let constant_radon_scaled = vec![0.0; npts];
     let init_param = {
         let v = pack_state_vector(&constant_radon_scaled, p.clone(), ts.clone(), inv_opts);
