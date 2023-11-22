@@ -24,6 +24,21 @@ use std::io::{Read, Write};
 #[macro_use]
 extern crate soa_derive;
 
+
+
+/// This enum is used to tell the ln_prob function the context in which it is being used
+/// which allows the 'parameter' vector to be defined differently for use in different
+/// contexts.
+#[derive(Debug)]
+pub enum LogProbContext{
+    MapSearch,
+    EmceeSample,
+    NutsSample,
+}
+
+
+
+
 #[derive(Debug, Clone, PartialEq, Copy, StructOfArray, Serialize, Deserialize)]
 #[soa_derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct InputRecord {

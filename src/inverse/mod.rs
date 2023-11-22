@@ -3,13 +3,17 @@ mod generic_primitives;
 use std::collections::HashMap;
 use std::time::SystemTime;
 
+use crate::LogProbContext;
 use crate::data::DataSet;
 use crate::data::GridVariable;
 
+use crate::forward::constants::NUM_PARAMETERS;
 use crate::inverse::generic_primitives::exp_transform;
 use crate::inverse::generic_primitives::lognormal_ln_pdf;
+use anyhow::bail;
 use log::error;
 use log::info;
+use ndarray::Array;
 use serde::{Deserialize, Serialize};
 
 use self::generic_primitives::{normal_ln_pdf, poisson_ln_pmf};
@@ -69,23 +73,45 @@ fn get_seed() -> usize {
         .as_secs() as usize
 }
 
+
+/// Checked inverse-logistic function with generic type parameter
+/// Same as statsrs::checked_logit
+fn checked_logit_generic<P>(p: P) -> Result<P>
+where P: Float,
+{
+    if p <= P::zero() || p >= P::one(){
+        bail!("Parameter out of range for Logit function")
+    }
+    Ok((p / (P::one() - p)).ln())
+}
+
+/// Logistic function with generic type parameter
+/// Same as statrs::logistic
+fn logistic_generic<P>(p: P) -> P
+where P: Float,
+{
+    P::one() / ((-p).exp() + P::one())
+}
+
+
 // Transform a variable defined over [0,1] to a variable defined over [-inf, +inf]
-fn transform_constrained_to_unconstrained(x: f64) -> f64 {
-    const A: f64 = 0.0;
-    const B: f64 = 1.0;
+fn transform_constrained_to_unconstrained<P>(x: P) -> P 
+where P: Float,
+{
+    let a = P::zero();
+    let b = P::one();
     #[allow(clippy::let_and_return)]
-    let y = if x == A {
-        -f64::INFINITY
-    } else if x == B {
-        f64::INFINITY
+    let y = if x == a {
+        P::neg_infinity()
+    } else if x == b {
+        P::infinity()
     } else {
-        let p = (x - A) / (B - A);
-        let result = checked_logit(p);
+        let p = (x - a) / (b - a);
+        let result = checked_logit_generic(p);
         match result {
             Ok(y) => y,
             // TODO: attach context to the error using ThisError or Anyhow
             Err(e) => {
-                println!("p={}", p);
                 panic!("{}", e);
             }
         }
@@ -94,11 +120,13 @@ fn transform_constrained_to_unconstrained(x: f64) -> f64 {
 }
 
 // Transform a variable defined over (-inf,inf) to a variable defined over (0,1)
-fn transform_unconstrained_to_constrained(y: f64) -> f64 {
-    const A: f64 = 0.0;
-    const B: f64 = 1.0;
+fn transform_unconstrained_to_constrained<P>(y: P) -> P 
+where P: Float,
+{
+    let a = P::zero();
+    let b = P::one();
     #[allow(clippy::let_and_return)]
-    let x = A + (B - A) * logistic(y);
+    let x = a + (b - a) * logistic_generic(y);
     x
 }
 
@@ -116,10 +144,20 @@ fn _disabled_inverse_transform_radon_concs(p: &mut [f64]) -> Result<()> {
     Ok(())
 }
 
-// Transform radon concentrations from actual values into a simpler-to-sample form
-pub fn transform_radon_concs1(radon_conc: &mut [f64]) -> Result<()> {
+/// Transform radon concentrations from actual values into a simpler-to-sample form
+///
+/// This is the transformation described in the paper for working with EMCEE-style
+/// samplers
+pub fn transform_radon_concs1<P>(radon_conc: &mut [P]) -> Result<()> 
+    where
+    P: Float,
+{
     let n = radon_conc.len();
-    let rnsum: f64 = radon_conc.iter().sum();
+    let mut rnsum: P = P::zero();
+    for itm in radon_conc.iter(){
+        rnsum = *itm + rnsum;
+    }
+    
     let mut acc = rnsum;
     let mut tmp_prev = rnsum.ln();
 
@@ -128,7 +166,7 @@ pub fn transform_radon_concs1(radon_conc: &mut [f64]) -> Result<()> {
         let tmp = radon_conc[ii];
         radon_conc[ii] = tmp_prev;
         tmp_prev = transform_constrained_to_unconstrained(tmp / acc);
-        acc -= tmp;
+        acc = acc - tmp;
     }
     radon_conc[n - 1] = tmp_prev;
 
@@ -136,27 +174,24 @@ pub fn transform_radon_concs1(radon_conc: &mut [f64]) -> Result<()> {
 }
 
 // Reverse transform radon concentration (from sampling form back to true values)
-pub fn inverse_transform_radon_concs1(p: &mut [f64]) -> Result<()> {
-    // copy so that we can report the error later
-    let p_saved: Vec<_> = p.into();
-
+pub fn inverse_transform_radon_concs1<P>(p: &mut [P]) -> Result<()> 
+where P:Float,
+{
     let n = p.len();
     let mut acc = p[0].exp();
     // handle out of range
     if !acc.is_finite() {
-        acc = if p[0] > 0.0 { std::f64::MAX } else { 0.0 };
+        acc = if p[0] > P::zero() { P::max_value() } else { P::zero() };
     }
     for ii in 0..(n - 1) {
         let rn = transform_unconstrained_to_constrained(p[ii + 1]) * acc;
         p[ii] = rn;
-        acc -= rn;
+        acc = acc - rn;
     }
     p[n - 1] = acc;
 
     if p.iter().any(|x| !x.is_finite()) {
         println!("Conversion failed");
-        println!("Input:  {:?}", p_saved);
-        println!("Output: {:?}", p);
         panic!();
     };
 
@@ -177,8 +212,9 @@ pub fn log2_usize(num: usize) -> usize {
     shift_count - 1
 }
 
-// Transform radon concentrations from actual values into a simpler-to-sample form
-pub fn transform_radon_concs<P>(radon_conc: &mut [P]) -> Result<()>
+/// Transform radon concentrations from actual values into a simpler-to-sample form
+/// This is an experimental option
+pub fn transform_radon_concs2<P>(radon_conc: &mut [P]) -> Result<()>
 where
     P: Float,
 {
@@ -215,8 +251,8 @@ where
     Ok(())
 }
 
-// Reverse transform radon concentration (from sampling form back to true values)
-pub fn inverse_transform_radon_concs<P>(p: &mut [P]) -> Result<()>
+/// Reverse transform radon concentration (from sampling form back to true values)
+pub fn inverse_transform_radon_concs2<P>(p: &mut [P]) -> Result<()>
 where
     P: Float + std::fmt::Debug,
 {
@@ -361,11 +397,11 @@ pub struct NutsOptions {
 #[derive(Debug, Clone, Serialize, Deserialize, Builder, Copy)]
 pub struct EmceeOptions {
     /// Number of burn-in EMCEE samples
-    #[builder(default = "1000")]
+    #[builder(default = "5000")]
     pub burn_in: usize,
 
     /// Number of EMCEE samples
-    #[builder(default = "1000")]
+    #[builder(default = "5000")]
     pub samples: usize,
 
     /// Number of walkers per dimension
@@ -373,7 +409,7 @@ pub struct EmceeOptions {
     pub walkers_per_dim: usize,
 
     /// The thinning factor, i.e. the number of samples to skip in the output
-    #[builder(default = "30")]
+    #[builder(default = "50")]
     pub thin: usize,
 }
 
@@ -399,14 +435,20 @@ where
 impl Model for DetectorInverseModel<f64> {
     type Params = Vec<f64>;
     fn log_prob(&self, state: &Self::Params) -> f64 {
-        self.lnprob_f64(state.as_slice())
+        self.lnprob_f64(state.as_slice(), LogProbContext::EmceeSample)
     }
+
+    const SCALE: f64 = 2.;
 }
 
 impl DetectorInverseModel<f64> {
+    /// Draw samples from the emcee sampler
+    /// 
+    /// Log-probability is derived from the `Model` trait
     pub fn emcee_sample(
         &self,
         inv_opts: InversionOptions,
+        map_radon: Vec<f64>,
     ) -> Result<Vec<GridVariable>, anyhow::Error> {
         let num_burn_in_samples = inv_opts.emcee.burn_in;
         let num_samples = inv_opts.emcee.samples;
@@ -421,11 +463,18 @@ impl DetectorInverseModel<f64> {
             x
         };
         let seed = inv_opts.random_seed.unwrap_or(get_seed());
+        let mut map_radon_transformed = map_radon.clone();
+        transform_radon_concs1(map_radon_transformed.as_mut_slice())
+            .expect("Forward transform failed");
+        let initial_state = pack_state_vector(map_radon_transformed.as_slice(), self.p.clone(), self.ts.clone(), self.inv_opts.clone());
 
-        // Burn in samples
+        // Burn in samples - starting at MAP (+/- a small factor)
         let walkers = ((seed)..(num_walkers + seed)).map(|seed| {
             let mut rng = Pcg64::seed_from_u64(seed.try_into().unwrap());
-            let p = (0..dim).map(|_| rng.gen_range(-1.0..=1.0)).collect();
+            let p = (0..dim)
+                .zip(initial_state.clone())
+                .map(|(_, x)| x + rng.gen_range(-1.0..=1.0) / 1e4)
+                .collect();
             (p, rng)
         });
 
@@ -486,7 +535,6 @@ impl DetectorInverseModel<f64> {
             // }
         });
 
-        dbg!(&autocorr.slice(s![.., 0]));
 
         //let autocorr_mean = autocorr.mean_axis(Axis(0));
 
@@ -502,8 +550,25 @@ impl DetectorInverseModel<f64> {
         let transformed_radon_samples = samples.slice(s![2.., .., ..]);
 
         // inverse transform
-        let radon_ref = self.calc_radon_ref();
-        let radon_samples = transformed_radon_samples.map(|x| x.exp() * radon_ref);
+        
+        //let radon_ref = self.calc_radon_ref();
+
+
+        //let radon_samples = transformed_radon_samples.map(|x| x.exp() * radon_ref);
+
+        
+        let mut radon_samples = Array::zeros(transformed_radon_samples.raw_dim());
+        let shape = radon_samples.shape().to_vec();
+        for ii in 0..shape[1]{
+            for jj in 0..shape[2]{
+                let mut work = transformed_radon_samples.slice(s![.., ii, jj]).to_owned();
+                assert!(work.len() == map_radon.len());
+                let work_slice = work.as_slice_mut().unwrap();
+                inverse_transform_radon_concs1(work_slice)?;
+                radon_samples.slice_mut(s![.., ii, jj]).assign(&work);
+                
+            }
+        }
 
         // Convert to variables with metadata
         let r_screen_scale_samples = GridVariable::new_from_parts(
@@ -556,19 +621,18 @@ impl<P: Float + std::fmt::Debug> DetectorInverseModel<P> {
         P::from(rnavg).unwrap()
     }
 
-    pub fn lnprob_f64(&self, theta: &[f64]) -> f64 {
+    pub fn lnprob_f64(&self, theta: &[f64], context: LogProbContext) -> f64 {
         let mut theta_p = Vec::<P>::with_capacity(theta.len());
         for itm in theta {
             theta_p.push(P::from(*itm).unwrap())
         }
-        self.generic_lnprob(&theta_p).to_f64().unwrap()
+        self.generic_lnprob(&theta_p, context).to_f64().unwrap()
     }
-    /*
-    Generic lnprob function which can take differentable values and is therefore
-    usable with the autdiff crate
-    */
+    
+    /// Generic lnprob function which can take differentiable values and is therefore
+    /// usable with the autdiff crate (`P` is for "Potentially differentiable")
     #[inline(always)]
-    pub fn generic_lnprob(&self, theta: &[P]) -> P {
+    pub fn generic_lnprob(&self, theta: &[P], context: LogProbContext) -> P {
         // Note: invalid prior results are signaled by
         // returning -std::f64::INFINITY
 
@@ -586,7 +650,6 @@ impl<P: Float + std::fmt::Debug> DetectorInverseModel<P> {
 
         // println!("{:?} {:?}", log_exflow_scale, exflow_scale);
 
-        // Do the inverse transform
         // inverse_transform_radon_concs(&mut radon).expect("Inverse transform failure");
 
         // println!("{:#?}", radon);
@@ -654,37 +717,52 @@ impl<P: Float + std::fmt::Debug> DetectorInverseModel<P> {
 
         // println!("{:?} {:?} {:?} {:?} || {:?} {:?} || {:?}", r_screen_scale_mu, r_screen_scale_sigma, exflow_scale_mu, exflow_sigma, r_screen_scale, exflow_scale, lprior);
 
-        // Normal priors on the radon scale factor.  This is applied to keep this parameter
-        // in a numerically-stable range, and should be too weak to have an impact on the
-        // result.  exp(10) = 22026; exp(100) = 2.688e43
-        let ten = P::from(10.0).unwrap();
 
-        for u in radon_transformed {
-            lprior = lprior + normal_ln_pdf(P::zero(), ten, *u);
-        }
+        // Do the inverse transform
+        let radon = match context{
+            LogProbContext::EmceeSample => {
+                let mut radon = radon_transformed.to_vec();
+                inverse_transform_radon_concs1(radon.as_mut_slice()).expect("Inverse transform failure");
+                radon
+            },
+            LogProbContext::NutsSample | LogProbContext::MapSearch => {
+                // Normal priors on the radon scale factor.  This is applied to keep this parameter
+                // in a numerically-stable range, and should be too weak to have an impact on the
+                // result.  exp(10) = 22026; exp(100) = 2.688e43
+                let ten = P::from(10.0).unwrap();
+        
+                for u in radon_transformed {
+                    lprior = lprior + normal_ln_pdf(P::zero(), ten, *u);
+                }
+        
+                // for good measure, also clip this parameter to [-100, 100]
+                let mut radon_transformed = radon_transformed.to_owned();
+                let hundred = P::from(100.0).unwrap();
+                for u in radon_transformed.iter_mut() {
+                    if *u > hundred {
+                        *u = hundred;
+                    } else if *u < -hundred {
+                        *u = -hundred;
+                    }
+                }
+        
+                let radon_reference_value = self.calc_radon_ref();
+        
+                let radon: Vec<_> = radon_transformed
+                    .iter()
+                    .map(|x| {
+                        let (x_t, lp_inc) = exp_transform(*x);
+                        // increment lp because of the change-of-variables
+                        lp = lp - lp_inc;
+                        x_t * radon_reference_value
+                    })
+                    .collect();
+                radon
 
-        // for good measure, also clip this parameter to [-100, 100]
-        let mut radon_transformed = radon_transformed.to_owned();
-        let hundred = P::from(100.0).unwrap();
-        for u in radon_transformed.iter_mut() {
-            if *u > hundred {
-                *u = hundred;
-            } else if *u < -hundred {
-                *u = -hundred;
-            }
-        }
+            },
+        };
+        
 
-        let radon_reference_value = self.calc_radon_ref();
-
-        let radon: Vec<_> = radon_transformed
-            .iter()
-            .map(|x| {
-                let (x_t, lp_inc) = exp_transform(*x);
-                // increment lp because of the change-of-variables
-                lp = lp - lp_inc;
-                x_t * radon_reference_value
-            })
-            .collect();
 
         assert!(lprior.is_finite());
 
@@ -712,7 +790,7 @@ impl<P: Float + std::fmt::Debug> DetectorInverseModel<P> {
         assert!(expected_counts.len() == observed_counts.len());
         assert!(radon.len() == expected_counts.len() + 1);
 
-        // The right apprach here depends on the context.  For emcee sampling, the best thing
+        // The right approach here depends on the context.  For emcee sampling, the best thing
         // to do is to return -inf, but for optimisation it might be better just to run
         // something...
 
@@ -761,7 +839,7 @@ impl CostFunction for DetectorInverseModel<FT<f64>> {
     type Output = f64;
 
     fn cost(&self, param: &Self::Param) -> Result<Self::Output, Error> {
-        let minus_lp = -self.lnprob_f64(param.as_slice().unwrap());
+        let minus_lp = -self.lnprob_f64(param.as_slice().unwrap(), LogProbContext::MapSearch);
         // TODO: if lp is -std::f64::INFINITY then we should probably
         // return an error
         //println!("{param}");
@@ -776,7 +854,7 @@ impl CostFunction for DetectorInverseModel<f64> {
     type Output = f64;
 
     fn cost(&self, param: &Self::Param) -> Result<Self::Output, Error> {
-        let minus_lp = -self.lnprob_f64(param.as_slice().unwrap());
+        let minus_lp = -self.lnprob_f64(param.as_slice().unwrap(), LogProbContext::MapSearch);
         // TODO: if lp is -std::f64::INFINITY then we should probably
         // return an error
         Ok(minus_lp)
@@ -790,7 +868,7 @@ impl CostFunction for CobylaDetectorInverseModel {
     type Output = Vec<f64>;
 
     fn cost(&self, param: &Self::Param) -> Result<Self::Output, Error> {
-        let minus_lp = -self.0.lnprob_f64(param.as_slice());
+        let minus_lp = -self.0.lnprob_f64(param.as_slice(), LogProbContext::MapSearch);
         // TODO: if lp is -std::f64::INFINITY then we should probably
         // return an error
         Ok(vec![minus_lp])
@@ -806,7 +884,7 @@ impl Gradient for DetectorInverseModel<FT<f64>> {
 
     /// Compute the gradient at parameter `p`.
     fn gradient(&self, param: &Self::Param) -> Result<Self::Gradient, Error> {
-        let minus_lp = |x: &[FT<f64>]| -self.generic_lnprob(x);
+        let minus_lp = |x: &[FT<f64>]| -self.generic_lnprob(x, LogProbContext::MapSearch);
         Ok(Array1::from_vec(grad(minus_lp, param.as_slice().unwrap())))
     }
 }
@@ -937,6 +1015,8 @@ pub fn fit_inverse_model(
         Array1::<f64>::from_vec(v)
     };
 
+    assert!(init_param.len() == ts.len() + 2);
+
     let fwd = DetectorForwardModelBuilder::<FT<f64>>::default()
         .data(ts.clone())
         .time_step(time_step_diff)
@@ -952,7 +1032,7 @@ pub fn fit_inverse_model(
 
     // 2. Optimisation (MAP)
 
-    let _map_radon = if inv_opts.report_map {
+    let map_radon = if inv_opts.report_map {
         info!("Searching for MAP");
         let niter = inv_opts.map_search_iterations;
         // COBYLA solver version
@@ -999,10 +1079,12 @@ pub fn fit_inverse_model(
         None
     };
 
+    println!("{:?}", map_radon);
+
     match inv_opts.sampler_kind {
         SamplerKind::Emcee => {
             let inverse_model_f64 = inverse_model.into_inner_type::<f64>();
-            let sampler_output = inverse_model_f64.emcee_sample(inv_opts)?;
+            let sampler_output = inverse_model_f64.emcee_sample(inv_opts, map_radon.expect("Emcee sampler needs MAP"))?;
             data.extend(sampler_output);
         }
 
@@ -1110,7 +1192,7 @@ mod tests {
         let pvec = ndarray::Array1::from_vec(init_param.clone());
         println!(
             "initial guess cost function evaluation: {}",
-            cost.generic_lnprob(&init_param)
+            cost.generic_lnprob(&init_param, LogProbContext::MapSearch)
         );
         println!(
             "Initial guess cost function gradient: {:?}",
@@ -1121,7 +1203,7 @@ mod tests {
         let worse_pvec = ndarray::Array1::from_vec(worse_guess.clone());
         println!(
             "Bad guess cost function evaluation: {}",
-            cost.generic_lnprob(&worse_guess)
+            cost.generic_lnprob(&worse_guess, LogProbContext::MapSearch)
         );
         println!(
             "Bad guess cost function gradient: {:?}\n       pvec: {:?}",
@@ -1231,18 +1313,33 @@ mod tests {
     #[test]
     fn transforms() {
         let npts = 16;
-        let radon: Vec<f64> = (0..npts).map(|itm| itm as f64).collect();
+        let radon: Vec<f64> = (1..=npts).map(|itm| itm as f64).collect();
         println!("Original:      {:?}", radon);
+        println!("Transformation #1");
         let mut radon_transformed = radon.clone();
-        transform_radon_concs(&mut radon_transformed).unwrap();
+        transform_radon_concs1(&mut radon_transformed).unwrap();
         println!("Transformed:   {:?}", radon_transformed);
         let mut radon_reconstructed = radon_transformed.clone();
-        inverse_transform_radon_concs(&mut radon_reconstructed).unwrap();
+        inverse_transform_radon_concs1(&mut radon_reconstructed).unwrap();
 
         println!("Reconstructed: {:?}", radon_reconstructed);
-        for (r1, r2) in radon.into_iter().zip(radon_reconstructed) {
+        for (r1, r2) in radon.clone().into_iter().zip(radon_reconstructed) {
             assert_approx_eq!(r1, r2);
         }
+
+        println!("Transformation #1");
+        // same, but for second pair of transforms
+        let mut radon_transformed = radon.clone();
+        transform_radon_concs2(&mut radon_transformed).unwrap();
+        println!("Transformed:   {:?}", radon_transformed);
+        let mut radon_reconstructed = radon_transformed.clone();
+        inverse_transform_radon_concs2(&mut radon_reconstructed).unwrap();
+
+        println!("Reconstructed: {:?}", radon_reconstructed);
+        for (r1, r2) in radon.clone().into_iter().zip(radon_reconstructed) {
+            assert_approx_eq!(r1, r2);
+        }
+
     }
 
     #[test]

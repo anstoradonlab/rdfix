@@ -81,7 +81,7 @@ impl CpuLogpFunc for PosteriorDensity {
     }
 
     fn logp(&mut self, position: &[f64], grad: &mut [f64]) -> Result<f64, Self::Err> {
-        let logp = self.inverse_model.lnprob_f64(position);
+        let logp = self.inverse_model.lnprob_f64(position, LogProbContext::NutsSample);
         let pos = ArrayView1::from(position).into_owned();
         let gradient = self.inverse_model.gradient(&pos).unwrap();
 
@@ -100,7 +100,7 @@ impl CpuLogpFunc for DetectorInverseModel<F1> {
     }
 
     fn logp(&mut self, position: &[f64], grad: &mut [f64]) -> Result<f64, Self::Err> {
-        let logp = self.lnprob_f64(position);
+        let logp = self.lnprob_f64(position, LogProbContext::NutsSample);
         let pos = ArrayView1::from(position).into_owned();
         let gradient = self.gradient(&pos).unwrap();
 

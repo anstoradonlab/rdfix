@@ -39,7 +39,7 @@ pub mod stepper;
 use self::stepper::integrate;
 
 use super::InputTimeSeries;
-use anyhow::Result;
+use anyhow::{Result, Error, anyhow};
 use constants::*;
 use num::{Float, ToPrimitive};
 use rdfix_gf::generated_functions as gf;
@@ -147,6 +147,7 @@ where
 }
 
 #[derive(Debug, Clone, Builder)]
+#[builder(build_fn(validate = "Self::validate"))]
 pub struct DetectorForwardModel<P>
 where
     P: Float + std::fmt::Debug,
@@ -186,6 +187,27 @@ where
         default = "Interpolator::<P>::new(self.data.as_ref().unwrap().len(), self.time_step.unwrap())"
     )]
     pub interp: Interpolator<P>,
+}
+
+impl<P: Float + std::fmt::Debug> DetectorForwardModelBuilder<P>{
+    fn validate(&self) -> Result<(), String>{
+        let l1 = match self.radon{
+            Some(ref x) => x.len(),
+            None => 0,
+        };
+        let l2 = match self.data{
+            Some(ref x) => x.len(),
+            None => 0,
+        };
+
+        if l1 == l2{
+            Ok(())
+        }
+        else{
+            Err("radon len needs to equal data len".to_string())
+        }
+        
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
