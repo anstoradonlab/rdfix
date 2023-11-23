@@ -9,7 +9,7 @@ edition = "2021"
 derive_builder = "0.12"
 rdfix_gf = {path="../rdfix_gf"}
 statrs = "0.16"
-autodiff = "0.7"
+autodifflib = {package="autodiff", version="0.7"}
 anyhow = "1.0"
 env_logger = "0.10"
 log = "0.4"

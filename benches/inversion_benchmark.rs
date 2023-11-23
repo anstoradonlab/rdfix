@@ -1,6 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 
-use autodiff::{F1, FT};
+use autodifflib::{F1, FT};
 
 use rdfix::forward::{DetectorForwardModelBuilder, DetectorParamsBuilder};
 use rdfix::get_test_timeseries;

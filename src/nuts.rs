@@ -1,6 +1,6 @@
 use anyhow::Result;
 use argmin::core::Gradient;
-use autodiff::F1;
+use autodifflib::F1;
 use ndarray::{Array1, ArrayView1};
 
 pub use nuts_rs::{new_sampler, Chain, CpuLogpFunc, LogpError, SampleStats, SamplerArgs};

@@ -58,7 +58,7 @@ use anyhow::Result;
 
 use itertools::izip;
 
-use autodiff::*;
+use autodifflib::*;
 
 // Link to the BLAS C library
 extern crate blas_src;
