@@ -1,5 +1,4 @@
 #![allow(clippy::excessive_precision)]
-use num::Float;
 use std::f64;
 
 #[allow(unused)]
@@ -35,72 +34,72 @@ const ACC: f64 = 10e-11;
 /// Glendon Ralph Pugh, 2004 p. 116
 #[allow(non_snake_case)]
 #[inline(always)]
-pub fn ln_gamma<P: Float>(x: P) -> P {
+pub fn ln_gamma(x: f64) -> f64 {
     // Auxiliary variable when evaluating the `gamma_ln` function
-    let GAMMA_R = P::from(10.900511).unwrap();
+    let GAMMA_R = f64::from(10.900511);
 
     // Polynomial coefficients for approximating the `gamma_ln` function
-    let GAMMA_DK: &[P] = &[
-        P::from(2.48574089138753565546e-5).unwrap(),
-        P::from(1.05142378581721974210).unwrap(),
-        P::from(-3.45687097222016235469).unwrap(),
-        P::from(4.51227709466894823700).unwrap(),
-        P::from(-2.98285225323576655721).unwrap(),
-        P::from(1.05639711577126713077).unwrap(),
-        P::from(-1.95428773191645869583e-1).unwrap(),
-        P::from(1.70970543404441224307e-2).unwrap(),
-        P::from(-5.71926117404305781283e-4).unwrap(),
-        P::from(4.63399473359905636708e-6).unwrap(),
-        P::from(-2.71994908488607703910e-9).unwrap(),
+    let GAMMA_DK: &[f64] = &[
+        f64::from(2.48574089138753565546e-5),
+        f64::from(1.05142378581721974210),
+        f64::from(-3.45687097222016235469),
+        f64::from(4.51227709466894823700),
+        f64::from(-2.98285225323576655721),
+        f64::from(1.05639711577126713077),
+        f64::from(-1.95428773191645869583e-1),
+        f64::from(1.70970543404441224307e-2),
+        f64::from(-5.71926117404305781283e-4),
+        f64::from(4.63399473359905636708e-6),
+        f64::from(-2.71994908488607703910e-9),
     ];
 
-    if x < P::from(0.5).unwrap() {
+    if x < f64::from(0.5) {
         let s = GAMMA_DK
             .iter()
             .enumerate()
             .skip(1)
-            .fold(GAMMA_DK[0], |s, t| s + *t.1 / (P::from(t.0).unwrap() - x));
+            .fold(GAMMA_DK[0], |s, t| s + *t.1 / ((t.0 as f64) - x));
 
-        P::from(LN_PI).unwrap()
-            - (P::from(f64::consts::PI).unwrap() * x).sin().ln()
+        f64::from(LN_PI)
+            - (f64::from(f64::consts::PI) * x).sin().ln()
             - s.ln()
-            - P::from(LN_2_SQRT_E_OVER_PI).unwrap()
-            - (P::from(0.5).unwrap() - x)
-                * ((P::from(0.5).unwrap() - x + GAMMA_R) / P::from(f64::consts::E).unwrap()).ln()
+            - f64::from(LN_2_SQRT_E_OVER_PI)
+            - (f64::from(0.5) - x)
+                * ((f64::from(0.5) - x + GAMMA_R) / f64::from(f64::consts::E)).ln()
     } else {
         let s = GAMMA_DK
             .iter()
             .enumerate()
             .skip(1)
             .fold(GAMMA_DK[0], |s, t| {
-                s + *t.1 / (x + P::from(t.0).unwrap() - P::one())
+                s + *t.1 / (x + (t.0 as f64) - 1.0)
             });
 
         s.ln()
-            + P::from(LN_2_SQRT_E_OVER_PI).unwrap()
-            + (x - P::from(0.5).unwrap())
-                * ((x - P::from(0.5).unwrap() + GAMMA_R) / P::from(f64::consts::E).unwrap()).ln()
+            + f64::from(LN_2_SQRT_E_OVER_PI)
+            + (x - f64::from(0.5))
+                * ((x - f64::from(0.5) + GAMMA_R) / f64::from(f64::consts::E)).ln()
     }
 }
 
 #[inline(always)]
-pub fn ln_factorial<P: Float>(x: P) -> P {
-    ln_gamma(x + P::one())
+pub fn ln_factorial(x: f64) -> f64 {
+    ln_gamma(x + 1.0)
 }
 
 /*
 Generic version of lognormal
 */
 #[inline(always)]
-pub fn lognormal_ln_pdf<P: Float>(location: P, scale: P, x: P) -> P {
+pub fn lognormal_ln_pdf(location: f64, scale: f64, x: f64) -> f64 {
     // Constant value for `ln(sqrt(2 * pi))`
     const LN_SQRT_2PI: f64 = 0.91893853320467274178032973640561763986139747363778;
 
-    if x <= P::zero() || x.is_infinite() {
-        P::from(f64::NEG_INFINITY).unwrap()
+    if x <= 0.0 || x.is_infinite() {
+        f64::from(f64::NEG_INFINITY)
     } else {
         let d = (x.ln() - location) / scale;
-        (-P::from(0.5).unwrap() * d * d) - P::from(LN_SQRT_2PI).unwrap() - (x * scale).ln()
+        (-f64::from(0.5) * d * d) - f64::from(LN_SQRT_2PI) - (x * scale).ln()
     }
 }
 
@@ -108,19 +107,19 @@ pub fn lognormal_ln_pdf<P: Float>(location: P, scale: P, x: P) -> P {
 Generic version of normal
 */
 #[inline(always)]
-pub fn normal_ln_pdf<P: Float>(location: P, scale: P, x: P) -> P {
+pub fn normal_ln_pdf(location: f64, scale: f64, x: f64) -> f64 {
     // Constant value for `ln(sqrt(2 * pi))`
     const LN_SQRT_2PI: f64 = 0.91893853320467274178032973640561763986139747363778;
 
     let d = (x - location) / scale;
-    (-P::from(0.5).unwrap() * d * d) - P::from(LN_SQRT_2PI).unwrap() - scale.ln()
+    (-f64::from(0.5) * d * d) - f64::from(LN_SQRT_2PI) - scale.ln()
 }
 
 /*
 Generic version of Poisson
 */
 #[inline(always)]
-pub fn poisson_ln_pmf<P: Float>(lambda: P, x: P) -> P {
+pub fn poisson_ln_pmf(lambda: f64, x: f64) -> f64 {
     -lambda + x * lambda.ln() - ln_factorial(x)
 }
 
@@ -136,7 +135,7 @@ pub fn poisson_ln_pmf<P: Float>(lambda: P, x: P) -> P {
 ///
 /// Also see this:
 /// https://mc-stan.org/docs/reference-manual/change-of-variables.html
-pub fn exp_transform<P: Float>(u: P) -> (P, P) {
+pub fn exp_transform(u: f64) -> (f64, f64) {
     // protect against overflow
     // let maxu = (P::max_value()).ln();
     // let mut u = u;
@@ -152,7 +151,7 @@ pub fn exp_transform<P: Float>(u: P) -> (P, P) {
 /// to the log_p
 ///
 #[allow(unused)] // TODO: remove this
-pub fn inverse_exp_transform<P: Float>(sigma: P) -> P {
+pub fn inverse_exp_transform(sigma: f64) -> f64 {
     sigma.ln()
 }
 

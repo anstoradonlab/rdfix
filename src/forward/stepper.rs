@@ -1,23 +1,21 @@
 use super::{constants::NUM_STATE_VARIABLES, DetectorForwardModel};
 use itertools::izip;
-use num::Float;
 
 /// Advance `state` from `t0` to `t1` by taking `num_steps` RK4 steps
 #[inline(always)]
-pub fn integrate<P>(
-    state: &mut [P; NUM_STATE_VARIABLES],
-    model: &DetectorForwardModel<P>,
-    t0: P,
-    t1: P,
+pub fn integrate(
+    state: &mut [f64; NUM_STATE_VARIABLES],
+    model: &DetectorForwardModel,
+    t0: f64,
+    t1: f64,
     num_steps: usize,
-) where
-    P: Float + std::fmt::Debug,
+)
 {
-    let mut k1 = [P::zero(); NUM_STATE_VARIABLES];
-    let mut k2 = [P::zero(); NUM_STATE_VARIABLES];
-    let mut k3 = [P::zero(); NUM_STATE_VARIABLES];
-    let mut k4 = [P::zero(); NUM_STATE_VARIABLES];
-    let mut ktmp = [P::zero(); NUM_STATE_VARIABLES];
+    let mut k1 = [0.0; NUM_STATE_VARIABLES];
+    let mut k2 = [0.0; NUM_STATE_VARIABLES];
+    let mut k3 = [0.0; NUM_STATE_VARIABLES];
+    let mut k4 = [0.0; NUM_STATE_VARIABLES];
+    let mut ktmp = [0.0; NUM_STATE_VARIABLES];
 
     let mut state_work = *state;
 
@@ -30,10 +28,10 @@ pub fn integrate<P>(
     // k4 = f(tn + h, yn + h*k3)
     // Ref: https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_methods
     let mut t = t0;
-    let two = P::from(2.0).unwrap();
-    let half = P::from(0.5).unwrap();
-    let sixth = P::from(1.0 / 6.0).unwrap();
-    let h = (t1 - t0) / P::from(num_steps).unwrap();
+    let two = f64::from(2.0);
+    let half = f64::from(0.5);
+    let sixth = f64::from(1.0 / 6.0);
+    let h = (t1 - t0) / (num_steps as f64);
     let half_h = half * h;
     for _ in 0..num_steps {
         // k1

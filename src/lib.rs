@@ -445,7 +445,7 @@ impl TestTimeseries {
                     }
                 }
                 // run forward model
-                let fwd = crate::forward::DetectorForwardModelBuilder::<f64>::default()
+                let fwd = crate::forward::DetectorForwardModelBuilder::default()
                     .radon(ts.radon_truth.clone())
                     .data(ts.clone())
                     .time_step(time_step)

@@ -31,7 +31,7 @@ plotters = "0.3"
 itertools = "0.11"
 assert_approx_eq = "1.1"
 indicatif = "0.17"
-num-traits = "0.2.15"
+#num-traits = "0.2.15"
 argmin = {version="0.8", default-features=false, features=["slog-logger", "rayon"]}
 # argmin-math = { version = "0.3", features = ["ndarray_latest-serde", "nalgebra_latest-serde"] }
 argmin-math = { version = "0.3", features = ["ndarray_latest-serde"] }

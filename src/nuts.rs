@@ -1,6 +1,5 @@
 use anyhow::Result;
 use argmin::core::Gradient;
-use autodifflib::F1;
 use autodiff::autodiff as enzyme_autodiff;
 use ndarray::{Array1, ArrayView1};
 
@@ -18,23 +17,19 @@ use super::inverse::*;
 // Define a function that computes the unnormalized posterior density
 // and its gradient.
 struct PosteriorDensity {
-    inverse_model: DetectorInverseModel<F1>,
+    inverse_model: DetectorInverseModel,
     dim: usize,
 }
 
 impl PosteriorDensity {
-    fn new(p: DetectorParams<f64>, inv_opts: InversionOptions, ts: InputTimeSeries) -> Self {
+    fn new(p: DetectorParams, inv_opts: InversionOptions, ts: InputTimeSeries) -> Self {
         let time_step = 60.0 * 30.0; //TODO
-        let time_step_diff = F1::cst(time_step);
 
         // Radon concentration, without
         let initial_radon = calc_radon_without_deconvolution(&ts, time_step);
 
-        // Params, as differentiable type
-        let p_diff = p.into_inner_type::<F1>();
         let mean_radon =
             initial_radon.iter().fold(0.0, |x, y| x + y) / (initial_radon.len() as f64);
-        let initial_radon_diff = vec![F1::cst(mean_radon); initial_radon.len()];
 
         // 1. Initialisation
         // Define initial parameter vector and cost function
@@ -45,14 +40,14 @@ impl PosteriorDensity {
             Array1::<f64>::from_vec(v)
         };
 
-        let fwd = DetectorForwardModelBuilder::<F1>::default()
+        let fwd = DetectorForwardModelBuilder::default()
             .data(ts.clone())
-            .time_step(time_step_diff)
-            .radon(initial_radon_diff.clone())
+            .time_step(time_step)
+            .radon(initial_radon.clone())
             .build()
             .expect("Failed to build detector model");
-        let inverse_model: DetectorInverseModel<F1> = DetectorInverseModel {
-            p: p_diff,
+        let inverse_model: DetectorInverseModel = DetectorInverseModel {
+            p: p,
             inv_opts,
             ts,
             fwd,
@@ -95,33 +90,14 @@ impl CpuLogpFunc for PosteriorDensity {
     }
 }
 
-/// NUTS sampler trait for model
-impl CpuLogpFunc for DetectorInverseModel<F1> {
-    type Err = PosteriorLogpError;
-
-    fn dim(&self) -> usize {
-        self.ts.len() + NUM_VARYING_PARAMETERS
-    }
-
-    fn logp(&mut self, position: &[f64], grad: &mut [f64]) -> Result<f64, Self::Err> {
-        let logp = self.lnprob_f64(position, LogProbContext::NutsSample);
-        let pos = ArrayView1::from(position).into_owned();
-        let gradient = self.gradient(&pos).unwrap();
-
-        for (g_out, g) in grad.iter_mut().zip(gradient) {
-            *g_out = g;
-        }
-        Ok(logp)
-    }
-}
 
 // `#[autodiff]` should use activities (Const|Active|Duplicated|DuplicatedNoNeed)
 #[enzyme_autodiff(d_lnprob_nuts_wrapper, Reverse, Active, Const, Duplicated)] 
-fn lnprob_nuts_wrapper(inv: DetectorInverseModel<f64>, theta: &[f64]) -> f64{
+fn lnprob_nuts_wrapper(inv: DetectorInverseModel, theta: &[f64]) -> f64{
     inv.lnprob_nuts(theta)
 }
 
-impl CpuLogpFunc for DetectorInverseModel<f64> {
+impl CpuLogpFunc for DetectorInverseModel {
     type Err = PosteriorLogpError;
 
     fn dim(&self) -> usize {
@@ -135,7 +111,7 @@ impl CpuLogpFunc for DetectorInverseModel<f64> {
     }
 }
 
-impl DetectorInverseModel<f64> {
+impl DetectorInverseModel {
     pub fn nuts_sample(&self, _npts: usize, depth: Option<u64>) -> Result<(), anyhow::Error> {
         let mut sampler_args = SamplerArgs {
             num_tune: 1000,
@@ -181,52 +157,6 @@ impl DetectorInverseModel<f64> {
     }
 }
 
-
-impl DetectorInverseModel<F1> {
-    pub fn nuts_sample(&self, _npts: usize, depth: Option<u64>) -> Result<(), anyhow::Error> {
-        let mut sampler_args = SamplerArgs {
-            num_tune: 1000,
-            ..Default::default()
-        };
-        // maxdepth makes an enormous difference to runtime
-        if let Some(maxdepth) = depth {
-            sampler_args.maxdepth = maxdepth; // use a small value, e.g. 3 for testing...
-        }
-
-        let logp_func = self.clone();
-        let dim = logp_func.dim();
-
-        let chain = 0;
-        let seed = 42;
-        let mut rng = ChaCha8Rng::seed_from_u64(seed);
-        let mut sampler = new_sampler(logp_func, sampler_args, chain, &mut rng);
-
-        // Set to some initial position and start drawing samples.
-        // Note: it's not possible to use ? here because the NUTS error isn't Sync
-        sampler
-            .set_position(&vec![0.0f64; dim])
-            .expect("Unrecoverable error during init");
-        let mut trace = vec![]; // Collection of all draws
-        let mut stats = vec![]; // Collection of statistics like the acceptance rate for each draw
-        for iter in 0..2000 {
-            let (draw, info) = sampler.draw().expect("Unrecoverable error during sampling");
-
-            if let Some(div_info) = info.divergence_info() {
-                println!(
-                    "Divergence on iteration {:?} at position {:?}",
-                    iter, div_info.start_location
-                );
-            }
-            if iter % 100 == 0 {
-                dbg!(&draw);
-                dbg!(&info);
-            }
-            trace.push(draw);
-            stats.push(info);
-        }
-        Ok(())
-    }
-}
 
 pub fn test(npts: usize, depth: Option<u64>) -> Result<()> {
     let mut sampler_args = nuts_rs::SamplerArgs {

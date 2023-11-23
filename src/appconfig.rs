@@ -7,8 +7,8 @@ use crate::inverse::{InversionOptions, InversionOptionsBuilder};
 /// Configuration options for the app
 #[derive(Debug, Clone, Serialize, Deserialize, Builder)]
 pub struct AppConfig {
-    #[builder(default = "DetectorParamsBuilder::<f64>::default().build().unwrap()")]
-    pub detector: DetectorParams<f64>,
+    #[builder(default = "DetectorParamsBuilder::default().build().unwrap()")]
+    pub detector: DetectorParams,
 
     #[builder(default = "InversionOptionsBuilder::default().build().unwrap()")]
     pub inversion: InversionOptions,
