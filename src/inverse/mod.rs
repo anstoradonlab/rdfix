@@ -7,7 +7,6 @@ use crate::LogProbContext;
 use crate::data::DataSet;
 use crate::data::GridVariable;
 
-use crate::forward::constants::NUM_PARAMETERS;
 use crate::inverse::generic_primitives::exp_transform;
 use crate::inverse::generic_primitives::lognormal_ln_pdf;
 use anyhow::bail;
@@ -49,8 +48,6 @@ use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg64;
 
 // use ndarray::{Array, Array1, Array2};
-
-use statrs::function::logistic::{checked_logit, logistic};
 
 use super::InputTimeSeries;
 
@@ -525,7 +522,7 @@ impl DetectorInverseModel<f64> {
 
         println!("Calculating autocorr");
         let samples_slice = samples.slice(s![.., 0..3, ..]);
-        let autocorr = samples_slice.map_axis(Axis(2), |x| {
+        let _autocorr = samples_slice.map_axis(Axis(2), |x| {
             let y = auto_corr_time::<_>(x.iter().cloned(), None, Some(10));
             y
             // match y{

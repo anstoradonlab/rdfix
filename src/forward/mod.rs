@@ -39,7 +39,7 @@ pub mod stepper;
 use self::stepper::integrate;
 
 use super::InputTimeSeries;
-use anyhow::{Result, Error, anyhow};
+use anyhow::Result;
 use constants::*;
 use num::{Float, ToPrimitive};
 use rdfix_gf::generated_functions as gf;
