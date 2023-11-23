@@ -625,6 +625,12 @@ impl<P: Float + std::fmt::Debug> DetectorInverseModel<P> {
         }
         self.generic_lnprob(&theta_p, context).to_f64().unwrap()
     }
+
+    /// Specialised version of lnprob function intended for use with NUTS sampler
+    pub fn lnprob_nuts(&self, theta: &[f64]) -> f64{
+        self.lnprob_f64(theta, LogProbContext::NutsSample)
+    }
+
     
     /// Generic lnprob function which can take differentiable values and is therefore
     /// usable with the autdiff crate (`P` is for "Potentially differentiable")
@@ -1086,7 +1092,14 @@ pub fn fit_inverse_model(
         }
 
         SamplerKind::Nuts => {
-            let _sampler_output = inverse_model.nuts_sample(2000, None)?;
+
+            //Enzyme version
+            let inverse_model_f64 = inverse_model.into_inner_type::<f64>();
+            let _sampler_output = inverse_model_f64.nuts_sample(2000, None)?;
+
+            // Autodiff (library) version
+            // let _sampler_output = inverse_model.nuts_sample(2000, None)?;
+
             // TODO data.extend(sampler_output);
         }
     }

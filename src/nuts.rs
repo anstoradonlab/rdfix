@@ -1,6 +1,7 @@
 use anyhow::Result;
 use argmin::core::Gradient;
 use autodifflib::F1;
+use autodiff::autodiff as enzyme_autodiff;
 use ndarray::{Array1, ArrayView1};
 
 pub use nuts_rs::{new_sampler, Chain, CpuLogpFunc, LogpError, SampleStats, SamplerArgs};
@@ -73,6 +74,8 @@ impl LogpError for PosteriorLogpError {
     }
 }
 
+
+/// NUTS sampler trait template (from documentation)
 impl CpuLogpFunc for PosteriorDensity {
     type Err = PosteriorLogpError;
 
@@ -81,7 +84,7 @@ impl CpuLogpFunc for PosteriorDensity {
     }
 
     fn logp(&mut self, position: &[f64], grad: &mut [f64]) -> Result<f64, Self::Err> {
-        let logp = self.inverse_model.lnprob_f64(position, LogProbContext::NutsSample);
+        let logp = self.inverse_model.lnprob_nuts(position);
         let pos = ArrayView1::from(position).into_owned();
         let gradient = self.inverse_model.gradient(&pos).unwrap();
 
@@ -92,6 +95,7 @@ impl CpuLogpFunc for PosteriorDensity {
     }
 }
 
+/// NUTS sampler trait for model
 impl CpuLogpFunc for DetectorInverseModel<F1> {
     type Err = PosteriorLogpError;
 
@@ -110,6 +114,73 @@ impl CpuLogpFunc for DetectorInverseModel<F1> {
         Ok(logp)
     }
 }
+
+// `#[autodiff]` should use activities (Const|Active|Duplicated|DuplicatedNoNeed)
+#[enzyme_autodiff(d_lnprob_nuts_wrapper, Reverse, Active, Const, Duplicated)] 
+fn lnprob_nuts_wrapper(inv: DetectorInverseModel<f64>, theta: &[f64]) -> f64{
+    inv.lnprob_nuts(theta)
+}
+
+impl CpuLogpFunc for DetectorInverseModel<f64> {
+    type Err = PosteriorLogpError;
+
+    fn dim(&self) -> usize {
+        self.ts.len() + NUM_VARYING_PARAMETERS
+    }
+
+    fn logp(&mut self, position: &[f64], grad: &mut [f64]) -> Result<f64, Self::Err> {
+        let logp = lnprob_nuts_wrapper(self.clone(), position);
+        d_lnprob_nuts_wrapper(self.clone(), position, grad, 1.0);
+        Ok(logp)
+    }
+}
+
+impl DetectorInverseModel<f64> {
+    pub fn nuts_sample(&self, _npts: usize, depth: Option<u64>) -> Result<(), anyhow::Error> {
+        let mut sampler_args = SamplerArgs {
+            num_tune: 1000,
+            ..Default::default()
+        };
+        // maxdepth makes an enormous difference to runtime
+        if let Some(maxdepth) = depth {
+            sampler_args.maxdepth = maxdepth; // use a small value, e.g. 3 for testing...
+        }
+
+        let logp_func = self.clone();
+        let dim = logp_func.dim();
+
+        let chain = 0;
+        let seed = 42;
+        let mut rng = ChaCha8Rng::seed_from_u64(seed);
+        let mut sampler = new_sampler(logp_func, sampler_args, chain, &mut rng);
+
+        // Set to some initial position and start drawing samples.
+        // Note: it's not possible to use ? here because the NUTS error isn't Sync
+        sampler
+            .set_position(&vec![0.0f64; dim])
+            .expect("Unrecoverable error during init");
+        let mut trace = vec![]; // Collection of all draws
+        let mut stats = vec![]; // Collection of statistics like the acceptance rate for each draw
+        for iter in 0..2000 {
+            let (draw, info) = sampler.draw().expect("Unrecoverable error during sampling");
+
+            if let Some(div_info) = info.divergence_info() {
+                println!(
+                    "Divergence on iteration {:?} at position {:?}",
+                    iter, div_info.start_location
+                );
+            }
+            if iter % 100 == 0 {
+                dbg!(&draw);
+                dbg!(&info);
+            }
+            trace.push(draw);
+            stats.push(info);
+        }
+        Ok(())
+    }
+}
+
 
 impl DetectorInverseModel<F1> {
     pub fn nuts_sample(&self, _npts: usize, depth: Option<u64>) -> Result<(), anyhow::Error> {
