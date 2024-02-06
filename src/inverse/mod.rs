@@ -294,8 +294,17 @@ pub struct InversionOptions {
     #[builder(default = "0.01")]
     pub exflow_sigma: f64,
     /// Constraint on the smoothness of radon timeseries
+    /// log Cᵢ ∼ Normal ( μ = log(Cᵢ/Cᵢ₋₁), σ = σ_δ )
     #[builder(default = "0.42140")]
     pub sigma_delta: f64,
+    /// Threshold beyond which sigma_delta has no further effect
+    /// For example, if this is set to 20 then a step change of
+    /// a factor of 20 is treated as a discontinuity, and is considered
+    /// equally likely as any other (arbitrarily large) step change.
+    /// This is a useful "escape hatch" for events such as calibration
+    /// pulses.
+    #[builder(default = "20.0")]
+    pub sigma_delta_threshold: f64,
     /// MCMC sampling strategy
     #[builder(default = "SamplerKind::Emcee")]
     pub sampler_kind: SamplerKind,
@@ -721,12 +730,26 @@ impl DetectorInverseModel {
             }
         };
 
+        let threshold = normal_ln_pdf(
+            0.0,
+            self.inv_opts.sigma_delta,
+            self.inv_opts.sigma_delta_threshold,
+        );
         if self.inv_opts.sigma_delta > 0.0 {
             for pair in radon.windows(2) {
-                // TODO: add checks for the two radon concs. to prevent the log
-                // function from blowing up
-                let lprior_inc =
-                    normal_ln_pdf(0.0, self.inv_opts.sigma_delta, (pair[1] - pair[0]).ln());
+                //
+                let mut lprior_inc =
+                    normal_ln_pdf(0.0, self.inv_opts.sigma_delta, (pair[1] / pair[0]).ln());
+                if !lprior_inc.is_finite() {
+                    dbg!(&lprior_inc);
+                    dbg!(pair);
+                }
+                // If the two points are very different (e.g. factor of 10 or more) then we should no
+                // longer apply the constraint.  E.g. this is a truncated normal
+
+                if lprior_inc > threshold {
+                    lprior_inc = threshold;
+                }
                 lprior += lprior_inc;
             }
         }
