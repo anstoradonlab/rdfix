@@ -123,7 +123,7 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
         chunks.push(ts);
     }
 
-    // This is the same as the code block, below, but without
+    // This is the same as the code block, below, but without parallel
     //for (count, ts_chunk) in chunks.into_iter().enumerate(){
     //    let fit_results = fit_inverse_model(p.clone(), inv_opts, ts_chunk.clone())?;
     //    let output_fname = cmd_args.output.join(format!("chunk-{count}.nc"));
@@ -135,7 +135,7 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
         .enumerate()
         .map(|(count, ts_chunk)| {
             let fit_results = fit_inverse_model(p.clone(), inv_opts, ts_chunk.clone())?;
-            let output_fname = cmd_args.output.join(format!("chunk-{count}.nc"));
+            let output_fname = cmd_args.output.join(format!("chunk-{count:04}.nc"));
             fit_results.to_netcdf(output_fname.clone())?;
             Ok::<PathBuf, anyhow::Error>(output_fname)
         })

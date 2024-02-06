@@ -66,9 +66,7 @@ pub enum TransformationKind {
 }
 
 #[derive(Debug, Clone, Builder, Serialize, Deserialize)]
-pub struct DetectorParams
-where
-{
+pub struct DetectorParams {
     /// External flow rate scale factor (default 1.0)
     /// The external flow rate is taken from the data file
     #[builder(default = "1.0")]
@@ -79,9 +77,9 @@ where
     /// Main radon delay volume (default 1.5 m3)
     #[builder(default = "1.5")]
     pub volume: f64,
-    /// Net efficiency of detector (default of 0.2)
-    #[builder(default = "0.2")]
-    pub sensitivity: f64,
+    //    /// Net efficiency of detector (default of 0.2)
+    //    #[builder(default = "0.2")]
+    //    pub sensitivity: f64,
     /// Screen mesh capture probability (rs) (default of 0.95)
     #[builder(default = "0.95")]
     pub r_screen: f64,
@@ -102,8 +100,7 @@ where
     pub plateout_time_constant: f64,
 }
 
-impl DetectorParamsBuilder
-{
+impl DetectorParamsBuilder {
     /// default set of parameters for a 1500L detector
     pub fn default_1500l(&mut self) -> &mut Self {
         let new = self;
@@ -120,8 +117,7 @@ impl DetectorParamsBuilder
 
 #[derive(Debug, Clone, Builder)]
 #[builder(build_fn(validate = "Self::validate"))]
-pub struct DetectorForwardModel
-{
+pub struct DetectorForwardModel {
     #[builder(default = "DetectorParamsBuilder::default().build().unwrap()")]
     pub p: DetectorParams,
     pub data: InputTimeSeries,
@@ -159,24 +155,22 @@ pub struct DetectorForwardModel
     pub interp: Interpolator,
 }
 
-impl DetectorForwardModelBuilder{
-    fn validate(&self) -> Result<(), String>{
-        let l1 = match self.radon{
+impl DetectorForwardModelBuilder {
+    fn validate(&self) -> Result<(), String> {
+        let l1 = match self.radon {
             Some(ref x) => x.len(),
             None => 0,
         };
-        let l2 = match self.data{
+        let l2 = match self.data {
             Some(ref x) => x.len(),
             None => 0,
         };
 
-        if l1 == l2{
+        if l1 == l2 {
             Ok(())
-        }
-        else{
+        } else {
             Err("radon len needs to equal data len".to_string())
         }
-        
     }
 }
 
@@ -192,12 +186,12 @@ pub struct Interpolator {
     pub w1: f64,
 }
 
-trait USizeConv{
+trait USizeConv {
     fn to_usize(&self) -> Result<usize>;
 }
 
-impl USizeConv for f64{
-    fn to_usize(&self) -> Result<usize>{
+impl USizeConv for f64 {
+    fn to_usize(&self) -> Result<usize> {
         Ok(*self as usize)
     }
 }
@@ -501,8 +495,7 @@ fn calc_eff_and_recoil_prob(
 //    vec![[1.1, 1.2], [2.1, 2.2]]
 //}
 
-impl DetectorForwardModel
-{
+impl DetectorForwardModel {
     /// Calculate the initial state, in state vector form
     ///
     /// # Arguments
@@ -551,17 +544,23 @@ impl DetectorForwardModel
             r_screen,
         );
 
+        let ssc = self.data.sensitivity[0] * radon0;
+
+        // initial "accumulated counts" are equal to the steady state count rate
+        // over the time interval (usually 30-minutes).  We need to add the background
+        // counts in here because gf::steady_state_count_rate doesn't include BG
+        let acc_counts_0 = (ssc + self.data.background_count_rate[0])*self.time_step;
+
         y[IDX_NRND1] = n_rn_d1;
         y[IDX_NRND2] = n_rn_d2;
         y[IDX_NRN] = n_rn;
         y[IDX_FA] = fa_1bq * rn;
         y[IDX_FB] = fb_1bq * rn;
         y[IDX_FC] = fc_1bq * rn;
-        y[IDX_ACC_COUNTS] = 0.0;
+        y[IDX_ACC_COUNTS] = acc_counts_0;
         y
     }
 
-    #[inline(always)]
     pub fn numerical_solution(&self) -> Result<Vec<[f64; NUM_STATE_VARIABLES]>> {
         //let system = (*self).clone()
         let system = self;
@@ -570,12 +569,14 @@ impl DetectorForwardModel
         let _tmax = system.time_step * f64::from(num_intervals as u16);
         let dt = system.time_step;
         let mut state = system.initial_state(system.radon[0]);
-
+        
         // number of small RK4 steps to take per dt
         let num_steps = 30_usize;
         let mut t = t0;
-        let mut expected_counts = Vec::with_capacity(num_steps);
-        let mut y_out = Vec::with_capacity(num_steps);
+        let mut expected_counts = Vec::with_capacity(num_intervals + 1);
+        let mut y_out = Vec::with_capacity(num_intervals + 1);
+        // for the first output point, report the initial state
+        y_out.push(state.clone());
         for _ in 0..num_intervals {
             state[IDX_ACC_COUNTS] = 0.0;
             integrate(&mut state, self, t, t + dt, num_steps);
@@ -678,7 +679,7 @@ mod tests {
     fn count_rate_equals_background_with_zero_radon() {
         let trec = InputRecord {
             time: 0.0,
-            /// LLD minus ULD (ULD are noise), missing values marked with NaN
+            // LLD minus ULD (ULD are noise), missing values marked with NaN
             counts: 0.0,
             background_count_rate: 1.0, // 100.0/60.0/60.,
             // sensitivity is chosen so that 1 Bq/m3 = 1000 counts / 30-min
@@ -720,7 +721,7 @@ mod tests {
     fn count_rate_at_constant_radon() {
         let trec = InputRecord {
             time: 0.0,
-            /// LLD minus ULD (ULD are noise), missing values marked with NaN
+            // LLD minus ULD (ULD are noise), missing values marked with NaN
             counts: 0.0,
             background_count_rate: 1.0, // 100.0/60.0/60.,
             // sensitivity is chosen so that 1 Bq/m3 = 1000 counts / 30-min
@@ -761,7 +762,7 @@ mod tests {
         let mut radon = vec![];
         let trec = InputRecord {
             time: 0.0,
-            /// LLD minus ULD (ULD are noise), missing values marked with NaN
+            // LLD minus ULD (ULD are noise), missing values marked with NaN
             counts: 0.0,
             background_count_rate: 0.0, // 100.0/60.0/60.,
             // sensitivity is chosen so that 1 Bq/m3 = 1000 counts / 30-min
@@ -782,12 +783,14 @@ mod tests {
             *itm.time = (ii as f64) * time_step;
         }
         let fwd = DetectorForwardModelBuilder::default()
-            .data(data)
-            .radon(radon)
+            .data(data.clone())
+            .radon(radon.clone())
             .time_step(time_step)
             .build()
             .unwrap();
         let num_counts = fwd.numerical_expected_counts().unwrap();
-        println!("{:#?}", num_counts);
+        assert!(num_counts.len() == data.len());
+        assert!(num_counts.len() == radon.len());
+        dbg!(&num_counts);
     }
 }

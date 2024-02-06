@@ -1,5 +1,6 @@
 use anyhow::Result;
 use argmin::core::Gradient;
+#[cfg(enzyme_ad)]
 use autodiff::autodiff as enzyme_autodiff;
 use ndarray::{Array1, ArrayView1};
 
@@ -28,8 +29,8 @@ impl PosteriorDensity {
         // Radon concentration, without
         let initial_radon = calc_radon_without_deconvolution(&ts, time_step);
 
-        let mean_radon =
-            initial_radon.iter().fold(0.0, |x, y| x + y) / (initial_radon.len() as f64);
+        //let mean_radon =
+        //    initial_radon.iter().fold(0.0, |x, y| x + y) / (initial_radon.len() as f64);
 
         // 1. Initialisation
         // Define initial parameter vector and cost function
@@ -130,7 +131,7 @@ impl InvOptsHelper{
 /// them away
 
 // `#[autodiff]` should use activities (Const|Active|Duplicated|DuplicatedNoNeed)
-#[enzyme_autodiff(d_lnprob_nuts_wrapper, Reverse, Active,   Const, Const, Const, Const, Duplicated)] 
+#[cfg_attr(enzyme_ad, enzyme_autodiff(d_lnprob_nuts_wrapper, Reverse, Active,   Const, Const, Const, Const, Duplicated))] 
 fn lnprob_nuts_wrapper(helper: InvOptsHelper, p: DetectorParams, ts: InputRecordVec, fwd: forward::DetectorForwardModel, theta: &[f64]) -> f64{
     
     let inv: DetectorInverseModel = DetectorInverseModel {
@@ -144,6 +145,11 @@ fn lnprob_nuts_wrapper(helper: InvOptsHelper, p: DetectorParams, ts: InputRecord
     inv.lnprob_nuts(theta)
 }
 
+#[cfg(not(enzyme_ad))]
+fn d_lnprob_nuts_wrapper(_helper: InvOptsHelper, _p: DetectorParams, _ts: InputRecordVec, _fwd: forward::DetectorForwardModel, _theta: &[f64], _grad: &mut[f64], _tangent: f64) -> (){
+    unimplemented!();
+}
+
 impl CpuLogpFunc for DetectorInverseModel {
     type Err = PosteriorLogpError;
 
@@ -154,7 +160,9 @@ impl CpuLogpFunc for DetectorInverseModel {
     fn logp(&mut self, position: &[f64], grad: &mut [f64]) -> Result<f64, Self::Err> {
         let helper = InvOptsHelper::from_inv_opts(&self.inv_opts);
         let logp = lnprob_nuts_wrapper(helper, self.p.clone(), self.ts.clone(), self.fwd.clone(), position);
+        //for itm in &mut *grad {*itm=0.0};
         d_lnprob_nuts_wrapper(helper, self.p.clone(), self.ts.clone(), self.fwd.clone(), position, grad, 1.0);
+        //dbg!(&grad);
         Ok(logp)
     }
 }
@@ -256,6 +264,7 @@ pub fn test(npts: usize, depth: Option<u64>) -> Result<()> {
 }
 
 #[cfg(test)]
+#[cfg(enzyme_ad)]
 mod tests {
     use super::*;
 

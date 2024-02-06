@@ -16,7 +16,7 @@ fn main() -> Result<()> {
     };
     let dt = ts.time[1] - ts.time[0];
 
-    let fwd = DetectorForwardModelBuilder::<f64>::default()
+    let fwd = DetectorForwardModelBuilder::default()
         .radon(radon.clone())
         .data(ts.clone())
         .time_step(dt)
@@ -31,7 +31,7 @@ fn main() -> Result<()> {
         *x = y;
     }
 
-    let p = DetectorParamsBuilder::<f64>::default().build()?;
+    let p = DetectorParamsBuilder::default().build()?;
     let inv_opts = InversionOptionsBuilder::default()
         .r_screen_sigma(1e-6)
         .exflow_sigma(1e-6)

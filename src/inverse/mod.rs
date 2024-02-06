@@ -3,19 +3,18 @@ mod generic_primitives;
 use std::collections::HashMap;
 use std::time::SystemTime;
 
-use crate::LogProbContext;
 use crate::data::DataSet;
 use crate::data::GridVariable;
+use crate::LogProbContext;
 
 use crate::inverse::generic_primitives::exp_transform;
 use crate::inverse::generic_primitives::lognormal_ln_pdf;
-use anyhow::bail;
 use log::error;
 use log::info;
 use ndarray::Array;
 use serde::{Deserialize, Serialize};
-use statrs::function::logistic::logistic;
 use statrs::function::logistic::checked_logit;
+use statrs::function::logistic::logistic;
 
 use self::generic_primitives::{normal_ln_pdf, poisson_ln_pmf};
 
@@ -69,11 +68,8 @@ fn get_seed() -> usize {
         .as_secs() as usize
 }
 
-
-
 // Transform a variable defined over [0,1] to a variable defined over [-inf, +inf]
-fn transform_constrained_to_unconstrained(x: f64) -> f64 
-{
+fn transform_constrained_to_unconstrained(x: f64) -> f64 {
     let a = 0.0;
     let b = 1.0;
     #[allow(clippy::let_and_return)]
@@ -96,8 +92,7 @@ fn transform_constrained_to_unconstrained(x: f64) -> f64
 }
 
 // Transform a variable defined over (-inf,inf) to a variable defined over (0,1)
-fn transform_unconstrained_to_constrained(y: f64) -> f64 
-{
+fn transform_unconstrained_to_constrained(y: f64) -> f64 {
     let a = 0.0;
     let b = 1.0;
     #[allow(clippy::let_and_return)]
@@ -123,14 +118,13 @@ fn _disabled_inverse_transform_radon_concs(p: &mut [f64]) -> Result<()> {
 ///
 /// This is the transformation described in the paper for working with EMCEE-style
 /// samplers
-pub fn transform_radon_concs1(radon_conc: &mut [f64]) -> Result<()> 
-{
+pub fn transform_radon_concs1(radon_conc: &mut [f64]) -> Result<()> {
     let n = radon_conc.len();
     let mut rnsum = 0.0;
-    for itm in radon_conc.iter(){
+    for itm in radon_conc.iter() {
         rnsum = *itm + rnsum;
     }
-    
+
     let mut acc = rnsum;
     let mut tmp_prev = rnsum.ln();
 
@@ -147,8 +141,7 @@ pub fn transform_radon_concs1(radon_conc: &mut [f64]) -> Result<()>
 }
 
 // Reverse transform radon concentration (from sampling form back to true values)
-pub fn inverse_transform_radon_concs1(p: &mut [f64]) -> Result<()> 
-{
+pub fn inverse_transform_radon_concs1(p: &mut [f64]) -> Result<()> {
     let n = p.len();
     let mut acc = p[0].exp();
     // handle out of range
@@ -186,8 +179,7 @@ pub fn log2_usize(num: usize) -> usize {
 
 /// Transform radon concentrations from actual values into a simpler-to-sample form
 /// This is an experimental option
-pub fn transform_radon_concs2(radon_conc: &mut [f64]) -> Result<()>
-{
+pub fn transform_radon_concs2(radon_conc: &mut [f64]) -> Result<()> {
     let n = radon_conc.len();
     assert!(is_power_of_two(n));
     let num_levels = log2_usize(n);
@@ -195,14 +187,8 @@ pub fn transform_radon_concs2(radon_conc: &mut [f64]) -> Result<()>
     let mut params: Vec<f64> = Vec::new();
     for _ in 0..num_levels {
         // pair elements, and then take average of consecutive elements
-        params.extend(
-            row.chunks_exact(2)
-                .map(|w| w[0] / ((w[0] + w[1]) / 2.0)),
-        );
-        row = row
-            .chunks_exact(2)
-            .map(|w| (w[0] + w[1]) / 2.0)
-            .collect();
+        params.extend(row.chunks_exact(2).map(|w| w[0] / ((w[0] + w[1]) / 2.0)));
+        row = row.chunks_exact(2).map(|w| (w[0] + w[1]) / 2.0).collect();
         //row.clear();
         //row.extend(tmp.iter());
         //println!("{:?}", row);
@@ -222,8 +208,7 @@ pub fn transform_radon_concs2(radon_conc: &mut [f64]) -> Result<()>
 }
 
 /// Reverse transform radon concentration (from sampling form back to true values)
-pub fn inverse_transform_radon_concs2(p: &mut [f64]) -> Result<()>
-{
+pub fn inverse_transform_radon_concs2(p: &mut [f64]) -> Result<()> {
     let npts = p.len();
     assert!(is_power_of_two(npts));
     let num_levels = log2_usize(npts);
@@ -275,8 +260,7 @@ pub fn pack_state_vector(
     p: DetectorParams,
     _ts: InputTimeSeries,
     _opt: InversionOptions,
-) -> Vec<f64>
-{
+) -> Vec<f64> {
     let mut values = Vec::new();
 
     // TODO: modify this to include transforms?
@@ -290,8 +274,10 @@ pub fn pack_state_vector(
 }
 
 // Unpack the state vector into its parts
-fn unpack_state_vector<'a>(guess: &'a &[f64], _inv_opts: &InversionOptions) -> (f64, f64, &'a [f64])
-{
+fn unpack_state_vector<'a>(
+    guess: &'a &[f64],
+    _inv_opts: &InversionOptions,
+) -> (f64, f64, &'a [f64]) {
     let r_screen_scale = guess[0];
     let exflow_scale = guess[1];
     let radon_transformed = &guess[2..];
@@ -307,6 +293,9 @@ pub struct InversionOptions {
     // TODO: proper default value
     #[builder(default = "0.01")]
     pub exflow_sigma: f64,
+    /// Constraint on the smoothness of radon timeseries
+    #[builder(default = "0.42140")]
+    pub sigma_delta: f64,
     /// MCMC sampling strategy
     #[builder(default = "SamplerKind::Emcee")]
     pub sampler_kind: SamplerKind,
@@ -378,8 +367,7 @@ pub struct EmceeOptions {
 }
 
 #[derive(Debug, Clone)]
-pub struct DetectorInverseModel
-{
+pub struct DetectorInverseModel {
     /// fixed detector parameters
     pub p: DetectorParams,
     /// Options which control how the inversion runs
@@ -405,7 +393,7 @@ impl Model for DetectorInverseModel {
 
 impl DetectorInverseModel {
     /// Draw samples from the emcee sampler
-    /// 
+    ///
     /// Log-probability is derived from the `Model` trait
     pub fn emcee_sample(
         &self,
@@ -428,7 +416,12 @@ impl DetectorInverseModel {
         let mut map_radon_transformed = map_radon.clone();
         transform_radon_concs1(map_radon_transformed.as_mut_slice())
             .expect("Forward transform failed");
-        let initial_state = pack_state_vector(map_radon_transformed.as_slice(), self.p.clone(), self.ts.clone(), self.inv_opts.clone());
+        let initial_state = pack_state_vector(
+            map_radon_transformed.as_slice(),
+            self.p.clone(),
+            self.ts.clone(),
+            self.inv_opts.clone(),
+        );
 
         // Burn in samples - starting at MAP (+/- a small factor)
         let walkers = ((seed)..(num_walkers + seed)).map(|seed| {
@@ -497,7 +490,6 @@ impl DetectorInverseModel {
             // }
         });
 
-
         //let autocorr_mean = autocorr.mean_axis(Axis(0));
 
         //dbg!(&autocorr_mean);
@@ -512,23 +504,24 @@ impl DetectorInverseModel {
         let transformed_radon_samples = samples.slice(s![2.., .., ..]);
 
         // inverse transform
-        
-        //let radon_ref = self.calc_radon_ref();
 
+        //let radon_ref = self.calc_radon_ref();
 
         //let radon_samples = transformed_radon_samples.map(|x| x.exp() * radon_ref);
 
-        
         let mut radon_samples = Array::zeros(transformed_radon_samples.raw_dim());
         let shape = radon_samples.shape().to_vec();
-        for ii in 0..shape[1]{
-            for jj in 0..shape[2]{
+        for ii in 0..shape[1] {
+            for jj in 0..shape[2] {
                 let mut work = transformed_radon_samples.slice(s![.., ii, jj]).to_owned();
                 assert!(work.len() == map_radon.len());
                 let work_slice = work.as_slice_mut().unwrap();
+                // We need to manually ensure that the inverse transform used here is appropriate
+                // and matches:
+                //    - the forward transform used above
+                //    - the inverse transform used in log_prob of the Model trait
                 inverse_transform_radon_concs1(work_slice)?;
                 radon_samples.slice_mut(s![.., ii, jj]).assign(&work);
-                
             }
         }
 
@@ -592,11 +585,10 @@ impl DetectorInverseModel {
     }
 
     /// Specialised version of lnprob function intended for use with NUTS sampler
-    pub fn lnprob_nuts(&self, theta: &[f64]) -> f64{
+    pub fn lnprob_nuts(&self, theta: &[f64]) -> f64 {
         self.lnprob_f64(theta, LogProbContext::NutsSample)
     }
 
-    
     /// Generic lnprob function which can take differentiable values and is therefore
     /// usable with the autdiff crate (`P` is for "Potentially differentiable")
     #[inline(always)]
@@ -685,24 +677,24 @@ impl DetectorInverseModel {
 
         // println!("{:?} {:?} {:?} {:?} || {:?} {:?} || {:?}", r_screen_scale_mu, r_screen_scale_sigma, exflow_scale_mu, exflow_sigma, r_screen_scale, exflow_scale, lprior);
 
-
         // Do the inverse transform
-        let radon = match context{
+        let radon = match context {
             LogProbContext::EmceeSample => {
                 let mut radon = radon_transformed.to_vec();
-                inverse_transform_radon_concs1(radon.as_mut_slice()).expect("Inverse transform failure");
+                inverse_transform_radon_concs1(radon.as_mut_slice())
+                    .expect("Inverse transform failure");
                 radon
-            },
+            }
             LogProbContext::NutsSample | LogProbContext::MapSearch => {
                 // Normal priors on the radon scale factor.  This is applied to keep this parameter
                 // in a numerically-stable range, and should be too weak to have an impact on the
                 // result.  exp(10) = 22026; exp(100) = 2.688e43
                 let ten = 10.0;
-        
+
                 for u in radon_transformed {
                     lprior = lprior + normal_ln_pdf(0.0, ten, *u);
                 }
-        
+
                 // for good measure, also clip this parameter to [-100, 100]
                 let mut radon_transformed = radon_transformed.to_owned();
                 let hundred = 100.0;
@@ -713,9 +705,9 @@ impl DetectorInverseModel {
                         *u = -hundred;
                     }
                 }
-        
+
                 let radon_reference_value = self.calc_radon_ref();
-        
+
                 let radon: Vec<_> = radon_transformed
                     .iter()
                     .map(|x| {
@@ -726,11 +718,18 @@ impl DetectorInverseModel {
                     })
                     .collect();
                 radon
-
-            },
+            }
         };
-        
 
+        if self.inv_opts.sigma_delta > 0.0 {
+            for pair in radon.windows(2) {
+                // TODO: add checks for the two radon concs. to prevent the log
+                // function from blowing up
+                let lprior_inc =
+                    normal_ln_pdf(0.0, self.inv_opts.sigma_delta, (pair[1] - pair[0]).ln());
+                lprior += lprior_inc;
+            }
+        }
 
         assert!(lprior.is_finite());
 
@@ -752,11 +751,10 @@ impl DetectorInverseModel {
             }
         };
 
-        // Note: skip the first 'observed count' because of the timestamp convention
-        let observed_counts: Vec<_> = self.ts.iter().skip(1).map(|itm| itm.counts).collect();
+        let observed_counts: Vec<_> = self.ts.iter().map(|itm| itm.counts).collect();
 
         assert!(expected_counts.len() == observed_counts.len());
-        assert!(radon.len() == expected_counts.len() + 1);
+        assert!(radon.len() == expected_counts.len());
 
         // The right approach here depends on the context.  For emcee sampling, the best thing
         // to do is to return -inf, but for optimisation it might be better just to run
@@ -786,7 +784,6 @@ impl DetectorInverseModel {
         assert!(lp.is_finite());
         lp
     }
-
 }
 
 /// 'argmin' CostFunction trait
@@ -803,7 +800,6 @@ impl CostFunction for DetectorInverseModel {
     }
 }
 
-
 struct CobylaDetectorInverseModel(DetectorInverseModel);
 
 impl CostFunction for CobylaDetectorInverseModel {
@@ -811,7 +807,9 @@ impl CostFunction for CobylaDetectorInverseModel {
     type Output = Vec<f64>;
 
     fn cost(&self, param: &Self::Param) -> Result<Self::Output, Error> {
-        let minus_lp = -self.0.lnprob_f64(param.as_slice(), LogProbContext::MapSearch);
+        let minus_lp = -self
+            .0
+            .lnprob_f64(param.as_slice(), LogProbContext::MapSearch);
         // TODO: if lp is -std::f64::INFINITY then we should probably
         // return an error
         Ok(vec![minus_lp])
@@ -826,7 +824,7 @@ impl Gradient for DetectorInverseModel {
     type Gradient = Array1<f64>;
 
     /// Compute the gradient at parameter `p`.
-    fn gradient(&self, param: &Self::Param) -> Result<Self::Gradient, Error> {
+    fn gradient(&self, _param: &Self::Param) -> Result<Self::Gradient, Error> {
         // Use enzyme here
         todo!();
     }
@@ -912,8 +910,8 @@ pub fn fit_inverse_model(
     ts: InputTimeSeries,
 ) -> Result<DataSet> {
     let npts = ts.len();
-    let time_step = 60.0 * 30.0; //TODO
-    let time_step_diff = time_step;
+    let time_step = 60.0 * 30.0; //TODO: calculate from input
+                                 //let time_step_diff = time_step;
 
     // Data, which will output at the end of the function
     let mut data: Vec<GridVariable> = vec![];
@@ -1015,12 +1013,12 @@ pub fn fit_inverse_model(
 
     match inv_opts.sampler_kind {
         SamplerKind::Emcee => {
-            let sampler_output = inverse_model.emcee_sample(inv_opts, map_radon.expect("Emcee sampler needs MAP"))?;
+            let sampler_output = inverse_model
+                .emcee_sample(inv_opts, map_radon.expect("Emcee sampler needs MAP"))?;
             data.extend(sampler_output);
         }
 
         SamplerKind::Nuts => {
-
             //Enzyme version
             let _sampler_output = inverse_model.nuts_sample(2000, None)?;
 
@@ -1049,7 +1047,7 @@ mod tests {
     fn get_timeseries(npts: usize) -> InputRecordVec {
         let trec = InputRecord {
             time: 0.0,
-            /// LLD minus ULD (ULD are noise), missing values marked with NaN
+            // LLD minus ULD (ULD are noise), missing values marked with NaN
             counts: 1000.0 + 30.0,
             background_count_rate: 1.0 / 60.0,
             // sensitivity is chosen so that 1 Bq/m3 = 1000 counts / 30-min
@@ -1082,10 +1080,56 @@ mod tests {
 
     #[test]
     fn can_compute_lnprob() {
-        let p = DetectorParamsBuilder::default()
-            .sensitivity(1000. / (3600.0 / 2.0))
+        let p = DetectorParamsBuilder::default().build().unwrap();
+        let inv_opts = InversionOptionsBuilder::default().build().unwrap();
+        let ts = get_timeseries(5);
+        let time_step = 60.0 * 30.0; //TODO
+                                     // Define initial parameter vector and cost function
+        let initial_radon = calc_radon_without_deconvolution(&ts, time_step);
+        let mut too_high_radon = initial_radon.clone();
+        let rnavg = initial_radon.iter().sum::<f64>() / (initial_radon.len() as f64);
+        for itm in too_high_radon.iter_mut().skip(1) {
+            *itm = rnavg * 100.0;
+        }
+
+        dbg!(&too_high_radon);
+        println!("Detector parameters: {:?}", p);
+        println!("Inversion options: {:?}", inv_opts);
+
+        println!("Initial radon concentration: {:?}", initial_radon);
+        let init_param = pack_state_vector(&initial_radon, p.clone(), ts.clone(), inv_opts);
+        let worse_guess = pack_state_vector(&too_high_radon, p.clone(), ts.clone(), inv_opts);
+
+        let fwd = DetectorForwardModelBuilder::default()
+            .data(ts.clone())
+            .time_step(time_step)
+            .radon(initial_radon)
             .build()
-            .unwrap();
+            .expect("Failed to build detector model");
+        let cost = DetectorInverseModel {
+            p: p.clone(),
+            inv_opts: inv_opts,
+            ts: ts.clone(),
+            fwd: fwd.clone(),
+        };
+
+        // println!("initial guess: {:#?}", init_param.values);
+        println!(
+            "initial guess cost function evaluation: {}",
+            cost.generic_lnprob(&init_param, LogProbContext::MapSearch)
+        );
+
+        // println!("const radon guess: {:#?}", worse_guess.values);
+        println!(
+            "Bad guess cost function evaluation: {}",
+            cost.generic_lnprob(&worse_guess, LogProbContext::MapSearch)
+        );
+    }
+
+    #[cfg(enzyme_ad)]
+    #[test]
+    fn can_compute_lnprob_with_gradient() {
+        let p = DetectorParamsBuilder::default().build().unwrap();
         let inv_opts = InversionOptionsBuilder::default().build().unwrap();
         let ts = get_timeseries(5);
         let time_step = 60.0 * 30.0; //TODO
@@ -1149,12 +1193,10 @@ mod tests {
         );
     }
 
+    #[cfg(enzyme_ad)]
     #[test]
     fn gradient_is_sensitive_to_ambient_radon() {
-        let p = DetectorParamsBuilder::default()
-            .sensitivity(1000. / (3600.0 / 2.0))
-            .build()
-            .unwrap();
+        let p = DetectorParamsBuilder::default().build().unwrap();
         let inv_opts = InversionOptionsBuilder::default().build().unwrap();
         let ts = get_timeseries(2);
         let time_step = 60.0 * 30.0; //TODO
@@ -1276,7 +1318,6 @@ mod tests {
         for (r1, r2) in radon.clone().into_iter().zip(radon_reconstructed) {
             assert_approx_eq!(r1, r2);
         }
-
     }
 
     #[test]

@@ -453,6 +453,8 @@ impl TestTimeseries {
                     .unwrap();
                 let expected_counts = fwd.numerical_expected_counts().unwrap();
 
+                assert!(expected_counts.len() == ts.len());
+
                 for (itm, ec) in ts.counts.iter_mut().zip(&expected_counts) {
                     *itm = Poisson::new(*ec).unwrap().sample(&mut rng);
                 }

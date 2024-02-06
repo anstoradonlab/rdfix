@@ -3,6 +3,11 @@ name = "rdfix"
 version = "0.1.0"
 edition = "2021"
 
+
+[features]
+default = []
+enzyme_ad = []
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -67,17 +72,17 @@ approx = "0.5.1"
 [profile.dev]
 opt-level = 3
 debug = true
-lto = "fat"
+#lto = "fat"
 
 [profile.test]
 opt-level = 3
 debug = true
-lto = "fat"
+#lto = "fat"
 
 [profile.release]
 opt-level = 3
 debug = true
-lto = "fat"
+#lto = "fat"
 
 [[bin]]
 name="rdfix-deconvolve"
