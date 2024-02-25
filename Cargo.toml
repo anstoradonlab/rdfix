@@ -15,24 +15,27 @@ derive_builder = "0.12"
 rdfix_gf = {path="../rdfix_gf"}
 statrs = "0.16"
 autodifflib = {package="autodiff", version="0.7"}
-autodiff = {path="/home/alan/code/enzyme-rust/library/autodiff"}
+#autodiff = {path="/home/alan/code/enzyme-rust/library/autodiff"}
 anyhow = "1.0"
 env_logger = "0.10"
 log = "0.4"
 csv = "1.2"
 serde = { version = "1", features = ["derive"] }
 
-ndarray = { version = "0.15", features = ["blas", "serde"] }
+## See: https://github.com/rust-ndarray/ndarray?tab=readme-ov-file#how-to-enable-blas-integration
+## 1. use netlib:
+#ndarray = { version = "0.15", features = ["blas", "serde"] }
+#blas-src = { version = "0.8", features = ["netlib"] }
 
-# switch to netlib BLAS when compiling release version, to avoid any dependencies on system BLAS
+## 2. use openblas (system library, faster compile. Still statically links openblas.)
+ndarray = { version = "0.15", features = ["blas", "serde"] }
 blas-src = { version = "0.8", features = ["openblas"] }
 openblas-src = { version = "0.10", features = ["cblas", "system"] }
-#blas-src = { version = "0.8", default-features = false, features = ["netlib"] }
 
 num = "0.4"
 soa_derive = "0.13"
-debug_plotter = "0.2"
-plotters = "0.3"
+#debug_plotter = "0.2"
+#plotters = "0.3"
 itertools = "0.11"
 assert_approx_eq = "1.1"
 indicatif = "0.17"
@@ -49,7 +52,7 @@ argmin_testfunctions = "0.1.1"
 nuts-rs = "0.6"
 thiserror = "1.0"
 rayon = "1.7.0"
-netcdf = { version = "0.8.1", features = ["ndarray"] }
+netcdf = { version = "0.8.1", features = ["ndarray", "static"] }
 tempfile = "3.6.0"
 chrono = { version = "0.4.26", features = ["serde"] }
 lazy_static = "1.4.0"

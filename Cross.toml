@@ -1,0 +1,18 @@
+default-target = "x86_64-unknown-linux-gnu"    # use this target if none is explicitly provided
+
+[target.x86_64-unknown-linux-gnu]
+image = "ghcr.io/cross-rs/x86_64-unknown-linux-gnu:main-centos"
+pre-build = [                                  # additional commands to run prior to building the package
+    "echo HTTP_PROXY: $HTTP_PROXY",
+    "curl http://www.google.com.au",
+    "yum update -y",
+    "yum install -y epel-release",  # extra packages for enterprise linux (for openblas)
+    "yum update -y",
+    "yum install -y cmake openssl-devel blas-devel.x86_64 openblas-devel.x86_64"  # blas-devel is the netlib version, may not be required
+]               
+
+[build.env]
+passthrough = [
+    "HTTP_PROXY",
+    "HTTPS_PROXY"
+]
