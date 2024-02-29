@@ -71,9 +71,7 @@ pub fn ln_gamma(x: f64) -> f64 {
             .iter()
             .enumerate()
             .skip(1)
-            .fold(GAMMA_DK[0], |s, t| {
-                s + *t.1 / (x + (t.0 as f64) - 1.0)
-            });
+            .fold(GAMMA_DK[0], |s, t| s + *t.1 / (x + (t.0 as f64) - 1.0));
 
         s.ln()
             + f64::from(LN_2_SQRT_E_OVER_PI)

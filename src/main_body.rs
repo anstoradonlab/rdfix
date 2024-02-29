@@ -8,7 +8,7 @@ use rayon::prelude::*;
 
 use crate::appconfig::AppConfigBuilder;
 use crate::inverse::fit_inverse_model;
-use crate::{cmdline::*, read_csv, TestTimeseries, TimeseriesKind};
+use crate::{cmdline::*, read_csv, TestTimeseries, TimeExtents, TimeseriesKind};
 use crate::{get_test_timeseries, write_csv};
 
 use crate::InputTimeSeries;
@@ -132,10 +132,12 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
 
     let results: Result<Vec<PathBuf>, Error> = chunks
         .into_par_iter()
-        .enumerate()
-        .map(|(count, ts_chunk)| {
+        .map(|ts_chunk| {
             let fit_results = fit_inverse_model(p.clone(), inv_opts, ts_chunk.clone())?;
-            let output_fname = cmd_args.output.join(format!("chunk-{count:04}.nc"));
+            let (t0, t1) = ts_chunk.time_extents_str();
+            let chunk_id = format!("chunk-{t0}-{t1}");
+
+            let output_fname = cmd_args.output.join(format!("{chunk_id}.nc"));
             fit_results.to_netcdf(output_fname.clone())?;
             Ok::<PathBuf, anyhow::Error>(output_fname)
         })

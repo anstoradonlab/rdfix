@@ -549,7 +549,7 @@ impl DetectorForwardModel {
         // initial "accumulated counts" are equal to the steady state count rate
         // over the time interval (usually 30-minutes).  We need to add the background
         // counts in here because gf::steady_state_count_rate doesn't include BG
-        let acc_counts_0 = (ssc + self.data.background_count_rate[0])*self.time_step;
+        let acc_counts_0 = (ssc + self.data.background_count_rate[0]) * self.time_step;
 
         y[IDX_NRND1] = n_rn_d1;
         y[IDX_NRND2] = n_rn_d2;
@@ -569,7 +569,7 @@ impl DetectorForwardModel {
         let _tmax = system.time_step * f64::from(num_intervals as u16);
         let dt = system.time_step;
         let mut state = system.initial_state(system.radon[0]);
-        
+
         // number of small RK4 steps to take per dt
         let num_steps = 30_usize;
         let mut t = t0;

@@ -24,20 +24,15 @@ use std::io::{Read, Write};
 #[macro_use]
 extern crate soa_derive;
 
-
-
 /// This enum is used to tell the ln_prob function the context in which it is being used
 /// which allows the 'parameter' vector to be defined differently for use in different
 /// contexts.
 #[derive(Debug)]
-pub enum LogProbContext{
+pub enum LogProbContext {
     MapSearch,
     EmceeSample,
     NutsSample,
 }
-
-
-
 
 #[derive(Debug, Clone, PartialEq, Copy, StructOfArray, Serialize, Deserialize)]
 #[soa_derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -303,7 +298,7 @@ impl InputRecordVec {
             &["time"],
             Some(HashMap::from([(
                 "units".to_owned(),
-                "second^(-1)".to_owned(),
+                "/s".to_owned(),
             )])),
         );
         data.push(v);
@@ -325,7 +320,7 @@ impl InputRecordVec {
             &["time"],
             Some(HashMap::from([(
                 "units".to_owned(),
-                "volumetric, m3/sec".to_owned(),
+                "volumetric, m3/s".to_owned(),
             )])),
         );
         data.push(v);
@@ -336,7 +331,7 @@ impl InputRecordVec {
             &["time"],
             Some(HashMap::from([(
                 "units".to_owned(),
-                "volumetric, m3/sec".to_owned(),
+                "volumetric, m3/s".to_owned(),
             )])),
         );
         data.push(v);
@@ -361,6 +356,31 @@ impl InputRecordVec {
 
         //DataSet::new_from_variables(data)
         data
+    }
+}
+
+pub trait TimeExtents {
+    /// Get the minimum and maximum time covered by the data
+    fn time_extents(&self) -> (NaiveDateTime, NaiveDateTime);
+    /// Get the minimum and maximum time covered by the data, each as a string,
+    /// in a format which is safe to use in a filename
+    fn time_extents_str(&self) -> (String, String);
+}
+
+impl TimeExtents for InputRecordVec {
+    fn time_extents(&self) -> (NaiveDateTime, NaiveDateTime) {
+        let t: NaiveDateTime = *REFERENCE_TIME;
+        let t0 = t + chrono::TimeDelta::seconds(self.time[0].round() as i64);
+        let t1 = t + chrono::TimeDelta::seconds(self.time[self.len() - 1].round() as i64);
+        (t0, t1)
+    }
+
+    fn time_extents_str(&self) -> (String, String) {
+        const FORMAT: &str = "%Y-%m-%dT%H%M%S";
+        let (t0, t1) = self.time_extents();
+        let t0 = t0.format(FORMAT);
+        let t1 = t1.format(FORMAT);
+        (format!("{}", t0), format!("{}", t1))
     }
 }
 

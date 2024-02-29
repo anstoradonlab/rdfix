@@ -9,8 +9,7 @@ pub fn integrate(
     t0: f64,
     t1: f64,
     num_steps: usize,
-)
-{
+) {
     let mut k1 = [0.0; NUM_STATE_VARIABLES];
     let mut k2 = [0.0; NUM_STATE_VARIABLES];
     let mut k3 = [0.0; NUM_STATE_VARIABLES];

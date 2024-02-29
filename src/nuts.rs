@@ -70,7 +70,6 @@ impl LogpError for PosteriorLogpError {
     }
 }
 
-
 /// NUTS sampler trait template (from documentation)
 impl CpuLogpFunc for PosteriorDensity {
     type Err = PosteriorLogpError;
@@ -91,9 +90,8 @@ impl CpuLogpFunc for PosteriorDensity {
     }
 }
 
-
 /// lnprob_nuts_wrapper helper struct
-/// 
+///
 /// We can't (as of the version of Enzyme from 23/11/2023) pass the InversionOptions
 /// struct through an enzyme #[autodiff] function, so this is a small helper struct
 /// containing only the parameters required for the lnprob calculation.
@@ -103,37 +101,52 @@ struct InvOptsHelper {
     pub exflow_sigma: f64,
 }
 
-impl InvOptsHelper{
-    fn from_inv_opts(inv_opts: &InversionOptions) -> Self
-    {
-        InvOptsHelper{
+impl InvOptsHelper {
+    fn from_inv_opts(inv_opts: &InversionOptions) -> Self {
+        InvOptsHelper {
             r_screen_sigma: inv_opts.r_screen_sigma,
-            exflow_sigma: inv_opts.exflow_sigma }
+            exflow_sigma: inv_opts.exflow_sigma,
+        }
     }
 
-    fn to_inv_opts(self) -> InversionOptions
-    {
+    fn to_inv_opts(self) -> InversionOptions {
         let mut inv_opts = InversionOptionsBuilder::default().build().unwrap();
         inv_opts.r_screen_sigma = self.r_screen_sigma;
         inv_opts.exflow_sigma = self.exflow_sigma;
         inv_opts
-    
     }
 }
 
 /// It seems that Enzyme Autodiff has problems with passing in the DetectorInverseModel
 /// so instead we'll pass in the components and then rebuild it.
-/// 
+///
 /// It turns out that the InversionOptions struct is the one giving problems (maybe because
 /// it's a nested struct?  Dunno.)
-/// 
+///
 /// There are a lot of unnecessary clone calls, fingers crossed that the compiler optimises
 /// them away
 
 // `#[autodiff]` should use activities (Const|Active|Duplicated|DuplicatedNoNeed)
-#[cfg_attr(enzyme_ad, enzyme_autodiff(d_lnprob_nuts_wrapper, Reverse, Active,   Const, Const, Const, Const, Duplicated))] 
-fn lnprob_nuts_wrapper(helper: InvOptsHelper, p: DetectorParams, ts: InputRecordVec, fwd: forward::DetectorForwardModel, theta: &[f64]) -> f64{
-    
+#[cfg_attr(
+    enzyme_ad,
+    enzyme_autodiff(
+        d_lnprob_nuts_wrapper,
+        Reverse,
+        Active,
+        Const,
+        Const,
+        Const,
+        Const,
+        Duplicated
+    )
+)]
+fn lnprob_nuts_wrapper(
+    helper: InvOptsHelper,
+    p: DetectorParams,
+    ts: InputRecordVec,
+    fwd: forward::DetectorForwardModel,
+    theta: &[f64],
+) -> f64 {
     let inv: DetectorInverseModel = DetectorInverseModel {
         p: p,
         inv_opts: helper.to_inv_opts(),
@@ -141,12 +154,19 @@ fn lnprob_nuts_wrapper(helper: InvOptsHelper, p: DetectorParams, ts: InputRecord
         fwd,
     };
 
-
     inv.lnprob_nuts(theta)
 }
 
 #[cfg(not(enzyme_ad))]
-fn d_lnprob_nuts_wrapper(_helper: InvOptsHelper, _p: DetectorParams, _ts: InputRecordVec, _fwd: forward::DetectorForwardModel, _theta: &[f64], _grad: &mut[f64], _tangent: f64) -> (){
+fn d_lnprob_nuts_wrapper(
+    _helper: InvOptsHelper,
+    _p: DetectorParams,
+    _ts: InputRecordVec,
+    _fwd: forward::DetectorForwardModel,
+    _theta: &[f64],
+    _grad: &mut [f64],
+    _tangent: f64,
+) -> () {
     unimplemented!();
 }
 
@@ -159,9 +179,23 @@ impl CpuLogpFunc for DetectorInverseModel {
 
     fn logp(&mut self, position: &[f64], grad: &mut [f64]) -> Result<f64, Self::Err> {
         let helper = InvOptsHelper::from_inv_opts(&self.inv_opts);
-        let logp = lnprob_nuts_wrapper(helper, self.p.clone(), self.ts.clone(), self.fwd.clone(), position);
+        let logp = lnprob_nuts_wrapper(
+            helper,
+            self.p.clone(),
+            self.ts.clone(),
+            self.fwd.clone(),
+            position,
+        );
         //for itm in &mut *grad {*itm=0.0};
-        d_lnprob_nuts_wrapper(helper, self.p.clone(), self.ts.clone(), self.fwd.clone(), position, grad, 1.0);
+        d_lnprob_nuts_wrapper(
+            helper,
+            self.p.clone(),
+            self.ts.clone(),
+            self.fwd.clone(),
+            position,
+            grad,
+            1.0,
+        );
         //dbg!(&grad);
         Ok(logp)
     }
@@ -212,7 +246,6 @@ impl DetectorInverseModel {
         Ok(())
     }
 }
-
 
 pub fn test(npts: usize, depth: Option<u64>) -> Result<()> {
     let mut sampler_args = nuts_rs::SamplerArgs {

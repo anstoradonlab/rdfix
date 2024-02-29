@@ -1,7 +1,9 @@
 mod generic_primitives;
 
+use anyhow::Result;
 use std::collections::HashMap;
 use std::time::SystemTime;
+use thiserror::Error;
 
 use crate::data::DataSet;
 use crate::data::GridVariable;
@@ -9,6 +11,7 @@ use crate::LogProbContext;
 
 use crate::inverse::generic_primitives::exp_transform;
 use crate::inverse::generic_primitives::lognormal_ln_pdf;
+use crate::TimeExtents;
 use log::error;
 use log::info;
 use ndarray::Array;
@@ -51,14 +54,23 @@ use rand_pcg::Pcg64;
 
 use super::InputTimeSeries;
 
-use anyhow::Result;
-
 use itertools::izip;
 
 // Link to the BLAS C library
 extern crate blas_src;
 
 pub const NUM_VARYING_PARAMETERS: usize = 2;
+
+/// Errors returned by this module
+#[derive(Error, Debug)]
+pub enum InverseModelError {
+    #[error("no valid observational data")]
+    NoObservations,
+    #[error("invalid value encountered when computing prior")]
+    InvalidPrior { reference: String },
+    #[error("unknown inverse model error")]
+    Unknown,
+}
 
 /// Return a seed for PRNG
 fn get_seed() -> usize {
@@ -632,7 +644,11 @@ impl DetectorInverseModel {
 
         // Place limits on parameters
         // (This should not be required, but...)
-        assert!(lp.is_finite());
+        if !lp.is_finite() {
+            let (t0, t1) = self.fwd.data.time_extents_str();
+            let chunk_id = format!("chunk-{t0}-{t1}");
+            panic!("Non-finite prior encountered {}", chunk_id);
+        }
 
         let half = 0.5;
         let two = 2.0;
@@ -657,6 +673,10 @@ impl DetectorInverseModel {
             dbg!(&lp);
             dbg!(&exflow_scale);
             dbg!(&r_screen_scale);
+
+            let (t0, t1) = self.fwd.data.time_extents_str();
+            let chunk_id = format!("chunk-{t0}-{t1}");
+            panic!("Non-finite prior encountered {}", chunk_id);
         }
 
         assert!(lp.is_finite());
@@ -692,6 +712,9 @@ impl DetectorInverseModel {
                 let mut radon = radon_transformed.to_vec();
                 inverse_transform_radon_concs1(radon.as_mut_slice())
                     .expect("Inverse transform failure");
+                for x in &radon {
+                    assert!(x.is_finite());
+                }
                 radon
             }
             LogProbContext::NutsSample | LogProbContext::MapSearch => {
@@ -726,6 +749,16 @@ impl DetectorInverseModel {
                         x_t * radon_reference_value
                     })
                     .collect();
+                for x in &radon {
+                    if !x.is_finite() {
+                        let (t0, t1) = self.fwd.data.time_extents_str();
+                        let chunk_id = format!("chunk-{t0}-{t1}");
+                        panic!(
+                            "Non-finite prior encountered in radon guess.  Chunk: {}, radon reference {:#?} radon {:#?}, radon_transformed {:#?}",
+                            chunk_id, radon_reference_value, &radon, &radon_transformed
+                        );
+                    }
+                }
                 radon
             }
         };
@@ -927,6 +960,43 @@ pub fn calc_radon_without_deconvolution(ts: &InputTimeSeries, time_step: f64) ->
         .collect()
 }
 
+
+fn can_quantise(values: &[f64], threshold: f64) -> bool{
+    if values.len() == 0{
+        return false;
+    }
+    // Unwrap: Ok, we've checked for zero-length slice
+    let maxval = values.iter().max_by(|a, b| a.total_cmp(b)).unwrap();
+    let minval = values.iter().max_by(|a, b| a.total_cmp(b)).unwrap();
+
+    if (maxval - minval) == 0.0{
+        // All values are already the same as each other - noop
+        return false;
+    }
+
+    (maxval - minval) / ((maxval.abs() + minval.abs()) / 2.0) > threshold
+}
+
+fn quantise(values: &mut[f64]) -> () {
+    let mean_value = values.iter().fold(0.0, |a,b| a+b) / (values.len() as f64);
+    values.iter_mut().map(|x| *x = mean_value);
+}
+
+fn quantise_timeseries(ts: InputTimeSeries) -> (InputTimeSeries, bool){
+    let mut ts = ts.clone();
+    let threshold = 1e-3;
+    let mut flag_changed = false;
+    if can_quantise(ts.sensitivity.as_slice(), threshold){
+        quantise(ts.sensitivity.as_mut_slice());
+        flag_changed = true;
+    }
+    if can_quantise(ts.background_count_rate.as_slice(), threshold){
+        quantise(ts.background_count_rate.as_mut_slice());
+        flag_changed = true;
+    }
+    (ts, flag_changed)
+}
+
 pub fn fit_inverse_model(
     p: DetectorParams,
     inv_opts: InversionOptions,
@@ -942,6 +1012,17 @@ pub fn fit_inverse_model(
     // Radon concentration, simple calculation without deconvolution
     let initial_radon = calc_radon_without_deconvolution(&ts, time_step);
 
+    if initial_radon.iter().all(|x| !x.is_finite()) {
+        return Err(InverseModelError::NoObservations.into());
+    }
+
+    let (ts, flag_changed) = quantise_timeseries(ts);
+    if flag_changed{
+        let (t0, t1) = ts.time_extents_str();
+        let chunk_id = format!("chunk-{t0}-{t1}");
+        info!("{} Values in input timeseries were close to constant and have been replaced by constant values as an optimisation.", chunk_id)
+    }
+
     data.push(GridVariable::new_from_parts(
         ArrayD::from_shape_vec(vec![initial_radon.len()], initial_radon.clone())?,
         "undeconvolved_radon",
@@ -950,11 +1031,30 @@ pub fn fit_inverse_model(
     ));
 
     // Scale by mean value and take log so that values take the range -inf,+inf
-    // with most values around zero
-    let mean_radon = initial_radon.iter().fold(0.0, |x, y| x + y) / (initial_radon.len() as f64);
+    // with most values around zero.  Mean value takes skips over NaNs in input
+    // which are used as placeholders for missing observations.
+    let n = initial_radon
+        .iter()
+        .fold(0, |x, y| x + if y.is_finite() { 1 } else { 0 });
+    let mean_radon = initial_radon
+        .iter()
+        .fold(0.0, |x, y| x + if y.is_finite() { x + y } else { x })
+        / (n as f64);
+
+    assert!(mean_radon.is_finite());
+
+    // Initial guess radon, un-deconvolved radon estimate with NaN gaps
+    // filled with mean radon concentration (after scaling, mean radon
+    // equals 0.0 )
     let initial_radon_scaled: Vec<_> = initial_radon
         .iter()
-        .map(|x| (x / mean_radon).ln())
+        .map(|x| {
+            if !x.is_finite() {
+                0.0
+            } else {
+                (x / mean_radon).ln()
+            }
+        })
         .collect();
 
     // 1. Initialisation
@@ -1032,7 +1132,7 @@ pub fn fit_inverse_model(
         None
     };
 
-    println!("{:?}", map_radon);
+    info!("MAP radon: {:?}", map_radon);
 
     match inv_opts.sampler_kind {
         SamplerKind::Emcee => {
