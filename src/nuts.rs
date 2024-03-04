@@ -26,7 +26,7 @@ impl PosteriorDensity {
     fn new(p: DetectorParams, inv_opts: InversionOptions, ts: InputTimeSeries) -> Self {
         let time_step = 60.0 * 30.0; //TODO
 
-        // Radon concentration, without
+        // Radon concentration, without deconvolution, non-negative
         let initial_radon = calc_radon_without_deconvolution(&ts, time_step);
 
         //let mean_radon =

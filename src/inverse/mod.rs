@@ -590,10 +590,15 @@ impl DetectorInverseModel {
 
 impl DetectorInverseModel {
     /// Calculate a reference value for use when transforming radon timeseries
-    /// Currently, this is just the mean radon concentration.
+    /// Currently, this is just the mean radon concentration (skipping NaNs).
     pub fn calc_radon_ref(&self) -> f64 {
         let rn = calc_radon_without_deconvolution(&self.ts, self.fwd.time_step);
-        let rnavg: f64 = rn.iter().fold(0.0, |acc, e| acc + e) / (rn.len() as f64);
+        let n = rn.iter().filter(|x| x.is_finite()).count();
+        let rnavg: f64 = rn
+            .iter()
+            .filter(|x| x.is_finite())
+            .fold(0.0, |acc, e| acc + e)
+            / (n as f64);
         rnavg
     }
 
@@ -754,8 +759,8 @@ impl DetectorInverseModel {
                         let (t0, t1) = self.fwd.data.time_extents_str();
                         let chunk_id = format!("chunk-{t0}-{t1}");
                         panic!(
-                            "Non-finite prior encountered in radon guess.  Chunk: {}, radon reference {:#?} radon {:#?}, radon_transformed {:#?}",
-                            chunk_id, radon_reference_value, &radon, &radon_transformed
+                            "Non-finite prior encountered in radon guess.  Chunk: {}, radon reference {:?} radon {:?}, radon_transformed {:?}, counts {:?}",
+                            chunk_id, radon_reference_value, &radon, &radon_transformed, &self.fwd.data.counts
                         );
                     }
                 }
@@ -763,6 +768,35 @@ impl DetectorInverseModel {
             }
         };
 
+        assert!(lprior.is_finite());
+
+            // "Numerical" prior on radon concentration (included to stop parameter values from sailing off to +oo)
+            // Maxiumum reasonable radon concentration, 100 kBq, is 10000x larger than a high radon concentration
+            // in the natural atmosphere
+            let rn_max = 1000e3;
+            let rn_max_sigma = 10e3;
+            let p0 = normal_ln_pdf(rn_max, rn_max_sigma, rn_max);
+            // for the PDF we'll use a uniform distribution up to Rn_max then a half-normal.  Any value
+            // which is <= Rn_max leaves lp unchanged.
+            for x in &radon {
+                if *x > rn_max {
+                    let lprior_inc = normal_ln_pdf(rn_max, rn_max_sigma, *x) - p0;
+                    if !lprior_inc.is_finite() {
+                        let (t0, t1) = self.fwd.data.time_extents_str();
+                        let chunk_id = format!("chunk-{t0}-{t1}");
+                        panic!(
+                        "Radon value error.  Chunk: {}, radon {:?}, radon_i {:?}, lprior_inc {:?}, p0 {:?}, counts {:?}",
+                        chunk_id, &radon, *x, lprior_inc, p0, &self.fwd.data.counts
+                    );
+                    }
+                    lprior += normal_ln_pdf(rn_max, rn_max_sigma, *x) - p0
+                }
+
+        }
+
+        assert!(lprior.is_finite());
+
+        // This is the "smooth timeseries" prior on radon concentration
         let threshold = normal_ln_pdf(
             0.0,
             self.inv_opts.sigma_delta,
@@ -770,17 +804,24 @@ impl DetectorInverseModel {
         );
         if self.inv_opts.sigma_delta > 0.0 {
             for pair in radon.windows(2) {
-                //
-                let mut lprior_inc =
-                    normal_ln_pdf(0.0, self.inv_opts.sigma_delta, (pair[1] / pair[0]).ln());
-                if !lprior_inc.is_finite() {
-                    dbg!(&lprior_inc);
-                    dbg!(pair);
+                let mut lprior_inc;
+                // Special case: one (or both) of the values is equal to zero (which might happen due
+                // to underflow when exp(large_negative_value) is calculated)
+                if pair[0] == 0.0 || pair[1] == 0.0 {
+                    lprior_inc = threshold
+                } else {
+                    lprior_inc =
+                        normal_ln_pdf(0.0, self.inv_opts.sigma_delta, (pair[1] / pair[0]).ln());
+                    if !lprior_inc.is_finite() {
+                        dbg!(&lprior_inc);
+                        dbg!(pair);
+                    }
                 }
                 // If the two points are very different (e.g. factor of 10 or more) then we should no
                 // longer apply the constraint.  E.g. this is a truncated normal
 
-                if lprior_inc > threshold {
+                // TODO: check the sign of this comparison
+                if lprior_inc < threshold {
                     lprior_inc = threshold;
                 }
                 lprior += lprior_inc;
@@ -807,6 +848,18 @@ impl DetectorInverseModel {
             }
         };
 
+        for x in &expected_counts {
+            if !x.is_finite() {
+                let chunk_id = self.fwd.data.chunk_id();
+                panic!(
+                    "forward model failed (produced invalid value) chunk {}, model counts {:?}, fwd model: {:?}",
+                    chunk_id,
+                    &expected_counts,
+                    &fwd_copy
+                );
+            }
+        }
+
         let observed_counts: Vec<_> = self.ts.iter().map(|itm| itm.counts).collect();
 
         assert!(expected_counts.len() == observed_counts.len());
@@ -829,9 +882,16 @@ impl DetectorInverseModel {
             //if *cex < MIN_VALID {
             //    return -f64::from(f64::INFINITY).unwrap();
             //}
+            if !cobs.is_finite() {
+                continue;
+            }
             let lp_inc = poisson_ln_pmf(*cex, *cobs);
             if !lp_inc.is_finite() {
-                println!(" *** expected (from model) = {:?} observed = {:?} lp_increment = {:?} ln_prior = {:?} r_screen_scale = {:?} exflow_scale = {:?} radon = {:?}", *cex, *cobs, lp_inc, lprior, r_screen_scale, exflow_scale, radon);
+                let chunk_id = self.fwd.data.chunk_id();
+                panic!(
+                    "encountered invalid log-probability increment in chunk {}. expected (from model) = {:?} observed = {:?} lp_increment = {:?} ln_prior = {:?} r_screen_scale = {:?} exflow_scale = {:?} radon = {:?}",
+                    chunk_id, *cex, *cobs, lp_inc, lprior, r_screen_scale, exflow_scale, radon
+                );
             }
             assert!(lp_inc.is_finite());
             lp = lp + lp_inc;
@@ -951,25 +1011,27 @@ where
 }
 */
 
+/// Un-deconvolved calculation of radon concentration.  Negative values
+/// are replaced with 0.0
 pub fn calc_radon_without_deconvolution(ts: &InputTimeSeries, time_step: f64) -> Vec<f64> {
     ts.iter()
         .map(|itm| {
             let cps = itm.counts / time_step;
             (cps - itm.background_count_rate) / itm.sensitivity
         })
+        .map(|itm| itm.clamp(0.0, f64::MAX))
         .collect()
 }
 
-
-fn can_quantise(values: &[f64], threshold: f64) -> bool{
-    if values.len() == 0{
+fn can_quantise(values: &[f64], threshold: f64) -> bool {
+    if values.len() == 0 {
         return false;
     }
     // Unwrap: Ok, we've checked for zero-length slice
     let maxval = values.iter().max_by(|a, b| a.total_cmp(b)).unwrap();
     let minval = values.iter().max_by(|a, b| a.total_cmp(b)).unwrap();
 
-    if (maxval - minval) == 0.0{
+    if (maxval - minval) == 0.0 {
         // All values are already the same as each other - noop
         return false;
     }
@@ -977,20 +1039,22 @@ fn can_quantise(values: &[f64], threshold: f64) -> bool{
     (maxval - minval) / ((maxval.abs() + minval.abs()) / 2.0) > threshold
 }
 
-fn quantise(values: &mut[f64]) -> () {
-    let mean_value = values.iter().fold(0.0, |a,b| a+b) / (values.len() as f64);
-    values.iter_mut().map(|x| *x = mean_value);
+fn quantise(values: &mut [f64]) -> () {
+    let mean_value = values.iter().fold(0.0, |a, b| a + b) / (values.len() as f64);
+    for x in values.iter_mut() {
+        *x = mean_value;
+    }
 }
 
-fn quantise_timeseries(ts: InputTimeSeries) -> (InputTimeSeries, bool){
+fn quantise_timeseries(ts: InputTimeSeries) -> (InputTimeSeries, bool) {
     let mut ts = ts.clone();
     let threshold = 1e-3;
     let mut flag_changed = false;
-    if can_quantise(ts.sensitivity.as_slice(), threshold){
+    if can_quantise(ts.sensitivity.as_slice(), threshold) {
         quantise(ts.sensitivity.as_mut_slice());
         flag_changed = true;
     }
-    if can_quantise(ts.background_count_rate.as_slice(), threshold){
+    if can_quantise(ts.background_count_rate.as_slice(), threshold) {
         quantise(ts.background_count_rate.as_mut_slice());
         flag_changed = true;
     }
@@ -1017,7 +1081,7 @@ pub fn fit_inverse_model(
     }
 
     let (ts, flag_changed) = quantise_timeseries(ts);
-    if flag_changed{
+    if flag_changed {
         let (t0, t1) = ts.time_extents_str();
         let chunk_id = format!("chunk-{t0}-{t1}");
         info!("{} Values in input timeseries were close to constant and have been replaced by constant values as an optimisation.", chunk_id)
@@ -1038,7 +1102,7 @@ pub fn fit_inverse_model(
         .fold(0, |x, y| x + if y.is_finite() { 1 } else { 0 });
     let mean_radon = initial_radon
         .iter()
-        .fold(0.0, |x, y| x + if y.is_finite() { x + y } else { x })
+        .fold(0.0, |x, y| if y.is_finite() { x + y } else { x })
         / (n as f64);
 
     assert!(mean_radon.is_finite());
@@ -1248,6 +1312,67 @@ mod tests {
             cost.generic_lnprob(&worse_guess, LogProbContext::MapSearch)
         );
     }
+
+
+    #[test]
+    fn lnprob_changes_if_radon_changes() {
+        let p = DetectorParamsBuilder::default().build().unwrap();
+        let inv_opts = InversionOptionsBuilder::default().build().unwrap();
+        let npts = 10;
+        let ts = get_timeseries(npts);
+        let time_step = 60.0 * 30.0; //TODO
+                                     // Define initial parameter vector and cost function
+        let initial_radon = calc_radon_without_deconvolution(&ts, time_step);
+        // calculate lnprob reference value (it's the exact solution, so should be == lnprob_max)
+        let init_param = pack_state_vector(&initial_radon, p.clone(), ts.clone(), inv_opts);
+        let fwd = DetectorForwardModelBuilder::default()
+        .data(ts.clone())
+        .time_step(time_step)
+        .radon(initial_radon.clone())
+        .build()
+        .expect("Failed to build detector model");
+        let cost = DetectorInverseModel {
+            p: p.clone(),
+            inv_opts: inv_opts,
+            ts: ts.clone(),
+            fwd: fwd.clone(),
+        };
+        let lnprob_max = cost.generic_lnprob(&init_param, LogProbContext::MapSearch);
+        // println!("initial guess: {:#?}", init_param.values);
+        println!(
+            "cost function evaluation at MAP: {}",
+            &lnprob_max
+        );
+        for idx in 0..npts{
+            let mut too_high_radon = initial_radon.clone();
+            too_high_radon[idx] += 1.0;
+
+            // calculate lprob for perturbed radon timeseries
+            let init_param = pack_state_vector(&too_high_radon, p.clone(), ts.clone(), inv_opts);
+            let fwd = DetectorForwardModelBuilder::default()
+            .data(ts.clone())
+            .time_step(time_step)
+            .radon(initial_radon.clone())
+            .build()
+            .expect("Failed to build detector model");
+            let cost = DetectorInverseModel {
+                p: p.clone(),
+                inv_opts: inv_opts,
+                ts: ts.clone(),
+                fwd: fwd.clone(),
+            };
+            let lnprob_perturbed = cost.generic_lnprob(&init_param, LogProbContext::MapSearch);
+            dbg!(&lnprob_perturbed, &lnprob_max);
+
+            assert!(lnprob_perturbed < lnprob_max)
+    
+        }
+
+
+    }
+
+
+
 
     #[cfg(enzyme_ad)]
     #[test]

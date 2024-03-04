@@ -296,10 +296,7 @@ impl InputRecordVec {
                 .into_dyn(),
             "background_count_rate",
             &["time"],
-            Some(HashMap::from([(
-                "units".to_owned(),
-                "/s".to_owned(),
-            )])),
+            Some(HashMap::from([("units".to_owned(), "/s".to_owned())])),
         );
         data.push(v);
 
@@ -365,6 +362,8 @@ pub trait TimeExtents {
     /// Get the minimum and maximum time covered by the data, each as a string,
     /// in a format which is safe to use in a filename
     fn time_extents_str(&self) -> (String, String);
+    /// Return a chunk id (basically, a timestamps encoded as string)
+    fn chunk_id(&self) -> String;
 }
 
 impl TimeExtents for InputRecordVec {
@@ -381,6 +380,11 @@ impl TimeExtents for InputRecordVec {
         let t0 = t0.format(FORMAT);
         let t1 = t1.format(FORMAT);
         (format!("{}", t0), format!("{}", t1))
+    }
+
+    fn chunk_id(&self) -> String {
+        let (t0_str, t1_str) = self.time_extents_str();
+        format!("{}--{}", t0_str, t1_str)
     }
 }
 

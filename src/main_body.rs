@@ -3,7 +3,7 @@ use std::fs;
 use std::fs::File;
 use std::path::PathBuf;
 
-use anyhow::{Error, Result};
+use anyhow::{Error, Result, anyhow};
 use rayon::prelude::*;
 
 use crate::appconfig::AppConfigBuilder;
@@ -13,7 +13,7 @@ use crate::{get_test_timeseries, write_csv};
 
 use crate::InputTimeSeries;
 
-use log::info;
+use log::{error, info};
 
 fn chunk_timeseries(
     ts: &InputTimeSeries,
@@ -123,23 +123,29 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
         chunks.push(ts);
     }
 
-    // This is the same as the code block, below, but without parallel
-    //for (count, ts_chunk) in chunks.into_iter().enumerate(){
-    //    let fit_results = fit_inverse_model(p.clone(), inv_opts, ts_chunk.clone())?;
-    //    let output_fname = cmd_args.output.join(format!("chunk-{count}.nc"));
-    //    fit_results.to_netcdf(output_fname)?;
-    //}
-
+    // .into_par_iter() makes this parallel;
+    // .panic_fuse() makes the loop stop earlier if any jobs panic
     let results: Result<Vec<PathBuf>, Error> = chunks
         .into_par_iter()
+        .panic_fuse()
         .map(|ts_chunk| {
-            let fit_results = fit_inverse_model(p.clone(), inv_opts, ts_chunk.clone())?;
-            let (t0, t1) = ts_chunk.time_extents_str();
-            let chunk_id = format!("chunk-{t0}-{t1}");
+            let fit_result = fit_inverse_model(p.clone(), inv_opts, ts_chunk.clone());
+            match fit_result{
+                Err(e) => {
+                    let chunk_id = ts_chunk.chunk_id();
+                    error!("Error processing {}: {}.  Continuing to next block.", chunk_id, e);
+                    Err(anyhow!("Error processing {}: {}.", chunk_id, e))
+                }
+                Ok(fit_results) => {
+                    let (t0, t1) = ts_chunk.time_extents_str();
+                    let chunk_id = format!("chunk-{t0}-{t1}");
+        
+                    let output_fname = cmd_args.output.join(format!("{chunk_id}.nc"));
+                    fit_results.to_netcdf(output_fname.clone())?;
+                    Ok::<PathBuf, anyhow::Error>(output_fname)
 
-            let output_fname = cmd_args.output.join(format!("{chunk_id}.nc"));
-            fit_results.to_netcdf(output_fname.clone())?;
-            Ok::<PathBuf, anyhow::Error>(output_fname)
+                },
+            }
         })
         .collect();
 

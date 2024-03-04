@@ -39,6 +39,7 @@ pub mod stepper;
 use self::stepper::integrate;
 
 use super::InputTimeSeries;
+use crate::TimeExtents;
 use anyhow::Result;
 use constants::*;
 use rdfix_gf::generated_functions as gf;
@@ -327,7 +328,14 @@ impl DetectorForwardModel {
         // scale factors (used in inversion)
         assert!(self.p.exflow_scale >= 0.0);
         assert!(self.p.r_screen_scale >= 0.0);
-        let q_external = q_external * self.p.exflow_scale;
+        let mut q_external = q_external * self.p.exflow_scale;
+        // The smallest plausible value for q_external is with the 100L detector, where operating
+        // flow rates can be typically (one volume in 45 minutes) ~2 l/min.  If the external flow
+        // rate is less than this, say a threshold of 0.5 l/min, then we're in background mode.
+        // The model is more-or-less invalid during backgrounds, but it would be better if it does
+        // not blow up - so we'll set a threshold on q_external.
+        let q_e_threshold = 0.5 / 1000.0 / 1800.0;
+        q_external = q_external.clamp(q_e_threshold, f64::MAX);
         let r_screen = self.p.r_screen * self.p.r_screen_scale;
         // ambient (or external) radon concentration in atoms per m3
         let n_rn_ext = radon / p_lamrn;
@@ -432,6 +440,16 @@ impl DetectorForwardModel {
         dy[IDX_FB] = d_fb_dt;
         dy[IDX_FC] = d_fc_dt;
         dy[IDX_ACC_COUNTS] = d_acc_counts_dt + background_count_rate;
+
+        if dy.iter().any(|x| !x.is_finite()) {
+            panic!("{} change rate calculation failed, dy={:?}, qe={:?}, Vd1={:}, Vd2={:}, n_rn_ext={:}, n_rn_inj={:}, n_rn_d1={:}, n_rn_d2={:}", 
+            self.data.chunk_id(),
+            &dy, &q_external, v_delay_1, v_delay_2,
+            n_rn_ext,
+            n_rn_inj,
+            n_rn_d1,
+            n_rn_d2);
+        }
     }
 }
 
@@ -470,11 +488,17 @@ fn calc_eff_and_recoil_prob(
     let eff = f64::from(1.0);
     let lamrn = f64::from(LAMRN);
 
+    // Note: do not account for radioactive decay in delay volumes because of what happens when
+    // q_external -> 0.0.  Instead, we're saying that the efficiency is determined relative to
+    // the radon concentration inside the delay volume.
+    // TODO: q_external here should be a "reference" flow rate
+
     // account for radioactive decay in delay volumes (typical effect size: 0.3%)
     let radon0 = f64::from(1.0);
     let rn_d1 = radon0 / (lamrn * v_delay_1 / q_external + f64::from(1.0));
     let rn_d2 = rn_d1 / (lamrn * v_delay_2 / q_external + f64::from(1.0));
     let rn = rn_d2 / (lamrn * v_tank / q_external + f64::from(1.0));
+    //let rn = radon0; // TODO: come up with a better approach
 
     // TODO: this call takes about 20-30% of the total time spent evaluating the
     // objective function in calculations of the inverse model.  Consider memorizing
@@ -511,6 +535,12 @@ impl DetectorForwardModel {
         // N/N0 = 1 / (lambda * tt + 1)
         // where lambda is the radioactive decay constant and tt = V/Q is the transit time
 
+        // Special case when radon concentration is zero
+        if radon0 <= 0.0 {
+            y[IDX_ACC_COUNTS] = (self.data.background_count_rate[0]) * self.time_step;
+            return y;
+        }
+
         // Generic versions of constants
         let lamrn_p = f64::from(LAMRN);
 
@@ -518,26 +548,40 @@ impl DetectorForwardModel {
         // radon, atoms/m3
         let n_radon0 = radon0 / lamrn_p;
 
-        let q_external = f64::from(self.data.q_external[0]) * self.p.exflow_scale;
+        // if q_external or q_internal are zero (e.g. this happens during a calibration)
+        // then this calculation will fail so force them to small values
+        // 1 cc/hour converted to m3/sec
+        let q_fill_value = (1.0 / 1000.0) / 3600.0;
+
+        let q_external = (f64::from(self.data.q_external[0]) * self.p.exflow_scale)
+            .clamp(q_fill_value, f64::MAX);
         let r_screen = self.p.r_screen * self.p.r_screen_scale;
 
+        // Note: this is Ok if volume_delay = 0
         let n_rn_d1 = n_radon0 / (lamrn_p * self.p.volume_delay_1 / q_external + 1.0);
         let n_rn_d2 = n_rn_d1 / (lamrn_p * self.p.volume_delay_2 / q_external + 1.0);
         let n_rn = n_rn_d2 / (lamrn_p * self.p.volume / q_external + 1.0);
         let rn = n_rn * lamrn_p;
 
+        // Again, clamp flow rates, but for the purpose of calculating eff and recoil probability
+        // don't include exflow_scale factor
+        let qi_i = self.data.q_internal[0];
+        let qi_i = qi_i.clamp(q_fill_value, f64::MAX);
+        let qe_i = self.data.q_external[0];
+        let qe_i = qe_i.clamp(q_fill_value, f64::MAX);
+
         let (_eff, recoil_prob) = calc_eff_and_recoil_prob(
-            f64::from(self.data.q_internal[0]),
+            qi_i,
             r_screen,
             self.p.plateout_time_constant,
-            f64::from(self.data.q_external[0]),
+            f64::from(qe_i),
             self.p.volume_delay_1,
             self.p.volume_delay_2,
             self.p.volume,
             f64::from(self.data.sensitivity[0]),
         );
         let (fa_1bq, fb_1bq, fc_1bq) = gf::num_filter_atoms_steady_state(
-            f64::from(self.data.q_internal[0]),
+            qi_i,
             self.p.volume,
             self.p.plateout_time_constant,
             recoil_prob,
@@ -558,6 +602,16 @@ impl DetectorForwardModel {
         y[IDX_FB] = fb_1bq * rn;
         y[IDX_FC] = fc_1bq * rn;
         y[IDX_ACC_COUNTS] = acc_counts_0;
+
+        if !(y.iter().all(|x| x.is_finite())) {
+            panic!(
+                "{} radon0: {:?}initial condition: {:#?}",
+                self.data.chunk_id(),
+                radon0,
+                y
+            );
+        };
+
         y
     }
 
