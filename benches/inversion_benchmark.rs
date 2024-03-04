@@ -70,11 +70,21 @@ fn objective_function(c: &mut Criterion) {
     //let pvec = ndarray::Array1::from_vec(init_param.clone());
 
     c.bench_function("Objective function, cost", |b| {
-        b.iter(|| cost.generic_lnprob(init_param.clone().as_slice(), rdfix::LogProbContext::MapSearch))
+        b.iter(|| {
+            cost.generic_lnprob(
+                init_param.clone().as_slice(),
+                rdfix::LogProbContext::MapSearch,
+            )
+        })
     });
 
     c.bench_function("Objective function, explicit f64, cost", |b| {
-        b.iter(|| cost.lnprob_f64(init_param.clone().as_slice(), rdfix::LogProbContext::MapSearch))
+        b.iter(|| {
+            cost.lnprob_f64(
+                init_param.clone().as_slice(),
+                rdfix::LogProbContext::MapSearch,
+            )
+        })
     });
 }
 
@@ -114,13 +124,14 @@ fn objective_function_func_npts(c: &mut Criterion) {
             BenchmarkId::from_parameter(input.len()),
             &input,
             |b, input| {
-                b.iter(|| cost.lnprob_f64(input.clone().as_slice(), rdfix::LogProbContext::MapSearch));
+                b.iter(|| {
+                    cost.lnprob_f64(input.clone().as_slice(), rdfix::LogProbContext::MapSearch)
+                });
             },
         );
     }
     group.finish();
 }
-
 
 // fn gradient_function(c: &mut Criterion) {
 //     let p = DetectorParamsBuilder::default()
@@ -158,13 +169,12 @@ fn objective_function_func_npts(c: &mut Criterion) {
 //     });
 // }
 
-
 //criterion_group!(benches, inv_benchmark, inv_benchmark_no_black_box);
 criterion_group!(
     benches,
     objective_function,
-//    gradient_function,
-//    objective_function_with_autodiff_types,
+    //    gradient_function,
+    //    objective_function_with_autodiff_types,
     objective_function_func_npts
 );
 criterion_main!(benches);

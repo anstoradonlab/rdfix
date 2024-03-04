@@ -3,7 +3,7 @@ use std::fs;
 use std::fs::File;
 use std::path::PathBuf;
 
-use anyhow::{Error, Result, anyhow};
+use anyhow::{anyhow, Error, Result};
 use rayon::prelude::*;
 
 use crate::appconfig::AppConfigBuilder;
@@ -130,21 +130,23 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
         .panic_fuse()
         .map(|ts_chunk| {
             let fit_result = fit_inverse_model(p.clone(), inv_opts, ts_chunk.clone());
-            match fit_result{
+            match fit_result {
                 Err(e) => {
                     let chunk_id = ts_chunk.chunk_id();
-                    error!("Error processing {}: {}.  Continuing to next block.", chunk_id, e);
+                    error!(
+                        "Error processing {}: {}.  Continuing to next block.",
+                        chunk_id, e
+                    );
                     Err(anyhow!("Error processing {}: {}.", chunk_id, e))
                 }
                 Ok(fit_results) => {
                     let (t0, t1) = ts_chunk.time_extents_str();
                     let chunk_id = format!("chunk-{t0}-{t1}");
-        
+
                     let output_fname = cmd_args.output.join(format!("{chunk_id}.nc"));
                     fit_results.to_netcdf(output_fname.clone())?;
                     Ok::<PathBuf, anyhow::Error>(output_fname)
-
-                },
+                }
             }
         })
         .collect();

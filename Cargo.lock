@@ -414,9 +414,9 @@ dependencies = [
 
 [[package]]
 name = "cobyla"
-version = "0.3.3"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7492b01f0f177a29180734412836d53abfebb53fe616fc45ebfd2a8e6b26a06"
+checksum = "f9631821f380e4a4305e153e1e864e953233acb50df070e76f4efe2940114340"
 dependencies = [
  "argmin",
  "instant",

@@ -45,7 +45,6 @@ use constants::*;
 use rdfix_gf::generated_functions as gf;
 use std::cell::RefCell;
 
-
 pub enum Parameter {
     Constant(f64),
     TimeSeries(Vec<f64>),
@@ -429,25 +428,28 @@ impl DetectorForwardModel {
         // This call to calc_na_nb factors takes up a large fraction of the run time
         // Thread-local storage is used to memorise the function result, avoiding the
         // need to re-evaluate the function when it is called with repeated values
-        thread_local!{
+        thread_local! {
             static ARG: RefCell<(f64, f64, f64)> = RefCell::new((f64::NAN, f64::NAN, f64::NAN));
             static VAL: RefCell<(f64, f64)> = RefCell::new((f64::NAN, f64::NAN));
         };
         let args = (q_internal, self.p.volume, self.p.plateout_time_constant);
         let mut val = (f64::NAN, f64::NAN);
-        ARG.with(|a|
-            if *a.borrow() == args{
+        ARG.with(|a| {
+            if *a.borrow() == args {
                 // Args are the same as previous call
                 VAL.with(|v| val = *v.borrow())
-            }
-            else{
+            } else {
                 // Need to run the function
-                val = gf::calc_na_nb_factors(q_internal, self.p.volume, self.p.plateout_time_constant);
+                val = gf::calc_na_nb_factors(
+                    q_internal,
+                    self.p.volume,
+                    self.p.plateout_time_constant,
+                );
                 // and save results for next call
                 VAL.with(|v| *v.borrow_mut() = val);
                 *a.borrow_mut() = args;
             }
-        );
+        });
         let (n_a, n_b) = val;
         //let (n_a, n_b) =
         //    gf::calc_na_nb_factors(q_internal, self.p.volume, self.p.plateout_time_constant);
@@ -468,13 +470,16 @@ impl DetectorForwardModel {
         dy[IDX_ACC_COUNTS] = d_acc_counts_dt + background_count_rate;
 
         if dy.iter().any(|x| !x.is_finite()) {
-            panic!("{} change rate calculation failed, dy={:?}, qe={:?}, Vd1={:}, Vd2={:}, n_rn_ext={:}, n_rn_inj={:}, n_rn_d1={:}, n_rn_d2={:}", 
+            panic!("{} change rate calculation failed, dy={:?}, qe={:?}, Vd1={:}, Vd2={:}, n_rn_ext={:}, n_rn_inj={:}, n_rn_d1={:}, n_rn_d2={:}, fa={}, fb={}, fc={}", 
             self.data.chunk_id(),
             &dy, &q_external, v_delay_1, v_delay_2,
             n_rn_ext,
             n_rn_inj,
             n_rn_d1,
-            n_rn_d2);
+            n_rn_d2,
+            fa,
+            fb,
+            fc);
         }
     }
 }
@@ -527,28 +532,27 @@ fn calc_eff_and_recoil_prob(
     //let rn = radon0; // TODO: come up with a better approach
 
     // This call to steady_state_count_rate takes about 20-30% of the total time spent evaluating the
-    // objective function in calculations of the inverse model.  This is an approach to 
+    // objective function in calculations of the inverse model.  This is an approach to
     // cache the result so that repeated evaluations are fast.
-    
-    thread_local!{
+
+    thread_local! {
         static ARG: RefCell<(f64, f64, f64, f64, f64, f64)> = RefCell::new((f64::NAN, f64::NAN, f64::NAN, f64::NAN, f64::NAN, f64::NAN));
         static VAL: RefCell<f64> = RefCell::new(f64::NAN);
     };
     let args = (q, v_tank, eff, lamp, recoil_prob, rs);
     let mut ssc = f64::NAN;
-    ARG.with(|a|
-        if *a.borrow() == args{
+    ARG.with(|a| {
+        if *a.borrow() == args {
             // Args are the same as previous call
             VAL.with(|v| ssc = *v.borrow())
-        }
-        else{
+        } else {
             // Need to run the function
             ssc = gf::steady_state_count_rate(q, v_tank, eff, lamp, recoil_prob, rs);
             // and save results for next call
             VAL.with(|v| *v.borrow_mut() = ssc);
             *a.borrow_mut() = args;
         }
-    );
+    });
 
     // let ssc = gf::steady_state_count_rate(q, v_tank, eff, lamp, recoil_prob, rs);
     let corrected_ssc = ssc * rn / radon0;

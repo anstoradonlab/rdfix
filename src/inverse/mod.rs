@@ -770,28 +770,27 @@ impl DetectorInverseModel {
 
         assert!(lprior.is_finite());
 
-            // "Numerical" prior on radon concentration (included to stop parameter values from sailing off to +oo)
-            // Maxiumum reasonable radon concentration, 100 kBq, is 10000x larger than a high radon concentration
-            // in the natural atmosphere
-            let rn_max = 1000e3;
-            let rn_max_sigma = 10e3;
-            let p0 = normal_ln_pdf(rn_max, rn_max_sigma, rn_max);
-            // for the PDF we'll use a uniform distribution up to Rn_max then a half-normal.  Any value
-            // which is <= Rn_max leaves lp unchanged.
-            for x in &radon {
-                if *x > rn_max {
-                    let lprior_inc = normal_ln_pdf(rn_max, rn_max_sigma, *x) - p0;
-                    if !lprior_inc.is_finite() {
-                        let (t0, t1) = self.fwd.data.time_extents_str();
-                        let chunk_id = format!("chunk-{t0}-{t1}");
-                        panic!(
+        // "Numerical" prior on radon concentration (included to stop parameter values from sailing off to +oo)
+        // Maxiumum reasonable radon concentration, 100 kBq, is 10000x larger than a high radon concentration
+        // in the natural atmosphere
+        let rn_max = 1000e3;
+        let rn_max_sigma = 10e3;
+        let p0 = normal_ln_pdf(rn_max, rn_max_sigma, rn_max);
+        // for the PDF we'll use a uniform distribution up to Rn_max then a half-normal.  Any value
+        // which is <= Rn_max leaves lp unchanged.
+        for x in &radon {
+            if *x > rn_max {
+                let lprior_inc = normal_ln_pdf(rn_max, rn_max_sigma, *x) - p0;
+                if !lprior_inc.is_finite() {
+                    let (t0, t1) = self.fwd.data.time_extents_str();
+                    let chunk_id = format!("chunk-{t0}-{t1}");
+                    panic!(
                         "Radon value error.  Chunk: {}, radon {:?}, radon_i {:?}, lprior_inc {:?}, p0 {:?}, counts {:?}",
                         chunk_id, &radon, *x, lprior_inc, p0, &self.fwd.data.counts
                     );
-                    }
-                    lprior += normal_ln_pdf(rn_max, rn_max_sigma, *x) - p0
                 }
-
+                lprior += normal_ln_pdf(rn_max, rn_max_sigma, *x) - p0
+            }
         }
 
         assert!(lprior.is_finite());
@@ -1313,7 +1312,6 @@ mod tests {
         );
     }
 
-
     #[test]
     fn lnprob_changes_if_radon_changes() {
         let p = DetectorParamsBuilder::default().build().unwrap();
@@ -1326,11 +1324,11 @@ mod tests {
         // calculate lnprob reference value (it's the exact solution, so should be == lnprob_max)
         let init_param = pack_state_vector(&initial_radon, p.clone(), ts.clone(), inv_opts);
         let fwd = DetectorForwardModelBuilder::default()
-        .data(ts.clone())
-        .time_step(time_step)
-        .radon(initial_radon.clone())
-        .build()
-        .expect("Failed to build detector model");
+            .data(ts.clone())
+            .time_step(time_step)
+            .radon(initial_radon.clone())
+            .build()
+            .expect("Failed to build detector model");
         let cost = DetectorInverseModel {
             p: p.clone(),
             inv_opts: inv_opts,
@@ -1339,22 +1337,19 @@ mod tests {
         };
         let lnprob_max = cost.generic_lnprob(&init_param, LogProbContext::MapSearch);
         // println!("initial guess: {:#?}", init_param.values);
-        println!(
-            "cost function evaluation at MAP: {}",
-            &lnprob_max
-        );
-        for idx in 0..npts{
+        println!("cost function evaluation at MAP: {}", &lnprob_max);
+        for idx in 0..npts {
             let mut too_high_radon = initial_radon.clone();
             too_high_radon[idx] += 1.0;
 
             // calculate lprob for perturbed radon timeseries
             let init_param = pack_state_vector(&too_high_radon, p.clone(), ts.clone(), inv_opts);
             let fwd = DetectorForwardModelBuilder::default()
-            .data(ts.clone())
-            .time_step(time_step)
-            .radon(initial_radon.clone())
-            .build()
-            .expect("Failed to build detector model");
+                .data(ts.clone())
+                .time_step(time_step)
+                .radon(initial_radon.clone())
+                .build()
+                .expect("Failed to build detector model");
             let cost = DetectorInverseModel {
                 p: p.clone(),
                 inv_opts: inv_opts,
@@ -1365,14 +1360,8 @@ mod tests {
             dbg!(&lnprob_perturbed, &lnprob_max);
 
             assert!(lnprob_perturbed < lnprob_max)
-    
         }
-
-
     }
-
-
-
 
     #[cfg(enzyme_ad)]
     #[test]
