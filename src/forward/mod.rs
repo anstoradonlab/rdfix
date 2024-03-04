@@ -43,6 +43,8 @@ use crate::TimeExtents;
 use anyhow::Result;
 use constants::*;
 use rdfix_gf::generated_functions as gf;
+use std::cell::RefCell;
+
 
 pub enum Parameter {
     Constant(f64),
@@ -423,8 +425,32 @@ impl DetectorForwardModel {
         // Na, Nb, Nc from steady-state in tank
         // transit time assuming plug flow in the tank
         //let tt = self.p.volume / q_internal;
-        let (n_a, n_b) =
-            gf::calc_na_nb_factors(q_internal, self.p.volume, self.p.plateout_time_constant);
+
+        // This call to calc_na_nb factors takes up a large fraction of the run time
+        // Thread-local storage is used to memorise the function result, avoiding the
+        // need to re-evaluate the function when it is called with repeated values
+        thread_local!{
+            static ARG: RefCell<(f64, f64, f64)> = RefCell::new((f64::NAN, f64::NAN, f64::NAN));
+            static VAL: RefCell<(f64, f64)> = RefCell::new((f64::NAN, f64::NAN));
+        };
+        let args = (q_internal, self.p.volume, self.p.plateout_time_constant);
+        let mut val = (f64::NAN, f64::NAN);
+        ARG.with(|a|
+            if *a.borrow() == args{
+                // Args are the same as previous call
+                VAL.with(|v| val = *v.borrow())
+            }
+            else{
+                // Need to run the function
+                val = gf::calc_na_nb_factors(q_internal, self.p.volume, self.p.plateout_time_constant);
+                // and save results for next call
+                VAL.with(|v| *v.borrow_mut() = val);
+                *a.borrow_mut() = args;
+            }
+        );
+        let (n_a, n_b) = val;
+        //let (n_a, n_b) =
+        //    gf::calc_na_nb_factors(q_internal, self.p.volume, self.p.plateout_time_constant);
         let n_c = 0.0;
         // compute rate of change of each state variable
         let d_fa_dt = q_internal * r_screen * n_a * n_rn * p_lamrn - fa * p_lama;
@@ -500,12 +526,33 @@ fn calc_eff_and_recoil_prob(
     let rn = rn_d2 / (lamrn * v_tank / q_external + f64::from(1.0));
     //let rn = radon0; // TODO: come up with a better approach
 
-    // TODO: this call takes about 20-30% of the total time spent evaluating the
-    // objective function in calculations of the inverse model.  Consider memorizing
-    // it, probably with the help of the generic_static crate
-    // Then, also do the same for gf::calc_na_nb_factors
-    let ssc = gf::steady_state_count_rate(q, v_tank, eff, lamp, recoil_prob, rs) * rn / radon0;
-    let eff = eff * total_efficiency / ssc;
+    // This call to steady_state_count_rate takes about 20-30% of the total time spent evaluating the
+    // objective function in calculations of the inverse model.  This is an approach to 
+    // cache the result so that repeated evaluations are fast.
+    
+    thread_local!{
+        static ARG: RefCell<(f64, f64, f64, f64, f64, f64)> = RefCell::new((f64::NAN, f64::NAN, f64::NAN, f64::NAN, f64::NAN, f64::NAN));
+        static VAL: RefCell<f64> = RefCell::new(f64::NAN);
+    };
+    let args = (q, v_tank, eff, lamp, recoil_prob, rs);
+    let mut ssc = f64::NAN;
+    ARG.with(|a|
+        if *a.borrow() == args{
+            // Args are the same as previous call
+            VAL.with(|v| ssc = *v.borrow())
+        }
+        else{
+            // Need to run the function
+            ssc = gf::steady_state_count_rate(q, v_tank, eff, lamp, recoil_prob, rs);
+            // and save results for next call
+            VAL.with(|v| *v.borrow_mut() = ssc);
+            *a.borrow_mut() = args;
+        }
+    );
+
+    // let ssc = gf::steady_state_count_rate(q, v_tank, eff, lamp, recoil_prob, rs);
+    let corrected_ssc = ssc * rn / radon0;
+    let eff = eff * total_efficiency / corrected_ssc;
     (eff, recoil_prob)
 }
 
