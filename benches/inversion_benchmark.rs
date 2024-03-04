@@ -70,16 +70,16 @@ fn objective_function(c: &mut Criterion) {
     //let pvec = ndarray::Array1::from_vec(init_param.clone());
 
     c.bench_function("Objective function, cost", |b| {
-        b.iter(|| cost.generic_lnprob(init_param.clone().as_slice()))
+        b.iter(|| cost.generic_lnprob(init_param.clone().as_slice(), rdfix::LogProbContext::MapSearch))
     });
 
     c.bench_function("Objective function, explicit f64, cost", |b| {
-        b.iter(|| cost.lnprob_f64(init_param.clone().as_slice()))
+        b.iter(|| cost.lnprob_f64(init_param.clone().as_slice(), rdfix::LogProbContext::MapSearch))
     });
 }
 
 fn objective_function_func_npts(c: &mut Criterion) {
-    fn getinput(npts: usize) -> (DetectorInverseModel<f64>, Vec<f64>) {
+    fn getinput(npts: usize) -> (DetectorInverseModel, Vec<f64>) {
         let p = DetectorParamsBuilder::default().build().unwrap();
         let inv_opts = InversionOptionsBuilder::default().build().unwrap();
         let ts = get_test_timeseries(npts);
@@ -114,94 +114,57 @@ fn objective_function_func_npts(c: &mut Criterion) {
             BenchmarkId::from_parameter(input.len()),
             &input,
             |b, input| {
-                b.iter(|| cost.lnprob_f64(input.clone().as_slice()));
+                b.iter(|| cost.lnprob_f64(input.clone().as_slice(), rdfix::LogProbContext::MapSearch));
             },
         );
     }
     group.finish();
 }
 
-fn gradient_function(c: &mut Criterion) {
-    let p = DetectorParamsBuilder::default()
-        .sensitivity(1000. / (3600.0 / 2.0))
-        .build()
-        .unwrap();
-    let inv_opts = InversionOptionsBuilder::default().build().unwrap();
-    let npts = 5;
-    let ts = get_test_timeseries(npts);
-    let time_step = 60.0 * 30.0; //TODO
-                                 // Define initial parameter vector and cost function
-    let mut radon = vec![1.0; ts.len()];
-    // set this value to something higher so that gradients will be non-zero
-    radon[1] = 10.0;
-    let init_param = pack_state_vector(&radon, p.clone(), ts.clone(), inv_opts);
 
-    let fwd = DetectorForwardModelBuilder::default()
-        .data(ts.clone())
-        .time_step(time_step)
-        .radon(radon.clone())
-        .build()
-        .expect("Failed to build detector model");
+// fn gradient_function(c: &mut Criterion) {
+//     let p = DetectorParamsBuilder::default()
+//         .build()
+//         .unwrap();
+//     let inv_opts = InversionOptionsBuilder::default().build().unwrap();
+//     let npts = 5;
+//     let ts = get_test_timeseries(npts);
+//     let time_step = 60.0 * 30.0; //TODO
+//                                  // Define initial parameter vector and cost function
+//     let mut radon = vec![1.0; ts.len()];
+//     // set this value to something higher so that gradients will be non-zero
+//     radon[1] = 10.0;
+//     let init_param = pack_state_vector(&radon, p.clone(), ts.clone(), inv_opts);
 
-    let cost_diff = DetectorInverseModel {
-        p: p.into_inner_type::<FT<f64>>(),
-        inv_opts: inv_opts,
-        ts: ts,
-        fwd: fwd.into_inner_type::<FT<f64>>(),
-    };
+//     let fwd = DetectorForwardModelBuilder::default()
+//         .data(ts.clone())
+//         .time_step(time_step)
+//         .radon(radon.clone())
+//         .build()
+//         .expect("Failed to build detector model");
 
-    // println!("initial guess: {:#?}", init_param.values);
-    let pvec = ndarray::Array1::from_vec(init_param.clone());
+//     let cost_diff = DetectorInverseModel {
+//         p: p.into_inner_type::<FT<f64>>(),
+//         inv_opts: inv_opts,
+//         ts: ts,
+//         fwd: fwd,
+//     };
 
-    c.bench_function("Objective function, gradient", |b| {
-        b.iter(|| cost_diff.gradient(&pvec).unwrap())
-    });
-}
+//     // println!("initial guess: {:#?}", init_param.values);
+//     let pvec = ndarray::Array1::from_vec(init_param.clone());
 
-fn objective_function_with_autodiff_types(c: &mut Criterion) {
-    let p = DetectorParamsBuilder::default()
-        .sensitivity(1000. / (3600.0 / 2.0))
-        .build()
-        .unwrap();
-    let inv_opts = InversionOptionsBuilder::default().build().unwrap();
-    let npts = 5;
-    let ts = get_test_timeseries(npts);
-    let time_step = 60.0 * 30.0; //TODO
-                                 // Define initial parameter vector and cost function
-    let mut radon = vec![1.0; ts.len()];
-    // set this value to something higher so that gradients will be non-zero
-    radon[1] = 10.0;
-    let init_param = pack_state_vector(&radon, p.clone(), ts.clone(), inv_opts);
+//     c.bench_function("Objective function, gradient", |b| {
+//         b.iter(|| cost_diff.gradient(&pvec).unwrap())
+//     });
+// }
 
-    let fwd = DetectorForwardModelBuilder::default()
-        .data(ts.clone())
-        .time_step(time_step)
-        .radon(radon.clone())
-        .build()
-        .expect("Failed to build detector model");
-
-    let cost_diff = DetectorInverseModel {
-        p: p.into_inner_type::<FT<f64>>(),
-        inv_opts: inv_opts,
-        ts: ts,
-        fwd: fwd.into_inner_type::<FT<f64>>(),
-    };
-
-    // println!("initial guess: {:#?}", init_param.values);
-    let nums: Vec<FT<f64>> = init_param.iter().map(|&x| F1::cst(x)).collect();
-    let pvec = ndarray::Array1::from_vec(nums.clone());
-
-    c.bench_function("Objective function, cost, with autodiff types", |b| {
-        b.iter(|| cost_diff.generic_lnprob(black_box(pvec.as_slice().unwrap())))
-    });
-}
 
 //criterion_group!(benches, inv_benchmark, inv_benchmark_no_black_box);
 criterion_group!(
     benches,
     objective_function,
-    gradient_function,
-    objective_function_with_autodiff_types,
+//    gradient_function,
+//    objective_function_with_autodiff_types,
     objective_function_func_npts
 );
 criterion_main!(benches);
