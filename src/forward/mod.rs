@@ -43,7 +43,7 @@ use crate::TimeExtents;
 use anyhow::Result;
 use constants::*;
 use rdfix_gf::generated_functions as gf;
-use std::cell::RefCell;
+use std::cell::Cell;
 
 pub enum Parameter {
     Constant(f64),
@@ -429,28 +429,24 @@ impl DetectorForwardModel {
         // Thread-local storage is used to memorise the function result, avoiding the
         // need to re-evaluate the function when it is called with repeated values
         thread_local! {
-            static ARG: RefCell<(f64, f64, f64)> = RefCell::new((f64::NAN, f64::NAN, f64::NAN));
-            static VAL: RefCell<(f64, f64)> = RefCell::new((f64::NAN, f64::NAN));
+            static ARG: Cell<[f64;3]> = const { Cell::new([f64::NAN; 3]) };
+            static VAL: Cell<[f64;2]> = const { Cell::new([f64::NAN; 2]) };
         };
-        let args = (q_internal, self.p.volume, self.p.plateout_time_constant);
-        let mut val = (f64::NAN, f64::NAN);
-        ARG.with(|a| {
-            if *a.borrow() == args {
-                // Args are the same as previous call
-                VAL.with(|v| val = *v.borrow())
-            } else {
-                // Need to run the function
-                val = gf::calc_na_nb_factors(
-                    q_internal,
-                    self.p.volume,
-                    self.p.plateout_time_constant,
-                );
-                // and save results for next call
-                VAL.with(|v| *v.borrow_mut() = val);
-                *a.borrow_mut() = args;
-            }
-        });
-        let (n_a, n_b) = val;
+        let args = [q_internal, self.p.volume, self.p.plateout_time_constant];
+
+        let [n_a, n_b] = if ARG.get() == args {
+            // Args are the same as previous call
+            VAL.get()
+        } else {
+            // Need to run the function because arguments have changed
+            let val =
+                gf::calc_na_nb_factors(q_internal, self.p.volume, self.p.plateout_time_constant)
+                    .into();
+            ARG.set(args);
+            VAL.set(val);
+            val
+        };
+
         //let (n_a, n_b) =
         //    gf::calc_na_nb_factors(q_internal, self.p.volume, self.p.plateout_time_constant);
         let n_c = 0.0;
@@ -479,7 +475,7 @@ impl DetectorForwardModel {
             n_rn_d2,
             fa,
             fb,
-            fc);
+            fc );
         }
     }
 }
@@ -534,25 +530,22 @@ fn calc_eff_and_recoil_prob(
     // This call to steady_state_count_rate takes about 20-30% of the total time spent evaluating the
     // objective function in calculations of the inverse model.  This is an approach to
     // cache the result so that repeated evaluations are fast.
-
     thread_local! {
-        static ARG: RefCell<(f64, f64, f64, f64, f64, f64)> = RefCell::new((f64::NAN, f64::NAN, f64::NAN, f64::NAN, f64::NAN, f64::NAN));
-        static VAL: RefCell<f64> = RefCell::new(f64::NAN);
+        static ARG: Cell<[f64;6]> = const { Cell::new([0.0; 6]) };
+        static VAL: Cell<f64> = const { Cell::new(f64::NAN) };
     };
-    let args = (q, v_tank, eff, lamp, recoil_prob, rs);
-    let mut ssc = f64::NAN;
-    ARG.with(|a| {
-        if *a.borrow() == args {
-            // Args are the same as previous call
-            VAL.with(|v| ssc = *v.borrow())
-        } else {
-            // Need to run the function
-            ssc = gf::steady_state_count_rate(q, v_tank, eff, lamp, recoil_prob, rs);
-            // and save results for next call
-            VAL.with(|v| *v.borrow_mut() = ssc);
-            *a.borrow_mut() = args;
-        }
-    });
+    let args = [q, v_tank, eff, lamp, recoil_prob, rs];
+    let ssc;
+    let ssc = if ARG.get() == args {
+        // Args are the same as previous call
+        VAL.get()
+    } else {
+        // Need to run the function because arguments have changed
+        ssc = gf::steady_state_count_rate(q, v_tank, eff, lamp, recoil_prob, rs);
+        ARG.set(args);
+        VAL.set(ssc);
+        ssc
+    };
 
     // let ssc = gf::steady_state_count_rate(q, v_tank, eff, lamp, recoil_prob, rs);
     let corrected_ssc = ssc * rn / radon0;
