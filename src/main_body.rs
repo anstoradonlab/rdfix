@@ -123,8 +123,9 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
         chunks.push(ts);
     }
 
-    if chunks.len() > 1 {
-        info!("Input data split into {} chunks.", chunks.len());
+    let nchunks = chunks.len();
+    if nchunks > 1 {
+        info!("Input data split into {} chunks.", nchunks);
     }
 
     // .into_par_iter() makes this parallel;
@@ -148,7 +149,7 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
                 // Panic occurred.  The panic message still gets printed out, so convert the error into 
                 // something we can use later and continue. 
                 let e = panic_wrapper.unwrap_err();
-                Err(anyhow!("{:?}", e))
+                Err(anyhow!("{:?}", e.downcast_ref::<&str>()))
             };
             match fit_result {
                 Err(e) => {
@@ -158,7 +159,7 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
                         chunk_id, e
                     );
                     // write a copy of the chunk to an "errors" directory (unless the input data are all NaN)
-                    if ts_chunk.counts.iter().any(|x| x.is_finite()) {
+                    if ts_chunk.counts.iter().any(|x| x.is_finite()) && nchunks > 1 {
                         let output_dir = cmd_args.output.join(format!("failed-chunk-{chunk_id}"));
                         std::fs::create_dir(&output_dir)?;
                         let csv_fname = output_dir.join("raw-data.csv");
