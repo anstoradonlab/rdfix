@@ -136,7 +136,8 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
             let chunk_id = ts_chunk.chunk_id();
             let output_fname = cmd_args.output.join(format!("{chunk_id}.nc"));
             if output_fname.exists(){
-                return Err(anyhow!("{} already processed", chunk_id));
+                info!("{} already processed, skipping to next chunk", chunk_id);
+                return Ok::<PathBuf, anyhow::Error>(output_fname)
             }
 
             let panic_wrapper = std::panic::catch_unwind(||  fit_inverse_model(p.clone(), inv_opts, ts_chunk.clone()));
