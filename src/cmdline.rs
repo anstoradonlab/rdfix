@@ -39,14 +39,19 @@ pub enum Commands {
 #[derive(Args, Debug)]
 pub struct DeconvArgs {
     /// Sets the config file
-    #[arg(short, long, value_name = "FILE")]
+    #[arg(short, long, value_name = "FILE", default_value=PathBuf::from("config.toml").into_os_string())]
     pub config: PathBuf,
 
     /// Sets the output directory
     #[arg(short, long, value_name = "OUTPUT_DIR", default_value=get_default_dir().join("deconv-output").into_os_string())]
     pub output: PathBuf,
 
+    /// Try to continue execution, for instance if a previous run was interrupted
+    #[arg(long="continue", default_value_t=false)]
+    pub cont: bool,
+
     /// Input files
+    #[arg(default_value=PathBuf::from("raw-data.csv").into_os_string())]
     pub input_files: Vec<PathBuf>,
 }
 
@@ -138,10 +143,12 @@ pub fn parse_cmdline() -> Result<RdfixArgs> {
                     }
                     let is_empty = args.output.read_dir()?.next().is_none();
                     if !is_empty {
-                        return Err(anyhow!(
-                            "Output directory \"{0}\" is not empty",
-                            args.output.display()
-                        ));
+                        if !args.cont {
+                            return Err(anyhow!(
+                                "Output directory \"{0}\" is not empty",
+                                args.output.display()
+                            ));
+                        };
                     }
                 }
             }

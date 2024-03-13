@@ -123,12 +123,22 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
         chunks.push(ts);
     }
 
+    if chunks.len() > 1 {
+        info!("Input data split into {} chunks.", chunks.len());
+    }
+
     // .into_par_iter() makes this parallel;
     // .panic_fuse() makes the loop stop earlier if any jobs panic
-    let results: Result<Vec<PathBuf>, Error> = chunks
+    let results_and_errors: Vec<Result<PathBuf, Error>> = chunks
         .into_par_iter()
-        .panic_fuse()
+        //        .panic_fuse()
         .map(|ts_chunk| {
+            let chunk_id = ts_chunk.chunk_id();
+            let output_fname = cmd_args.output.join(format!("{chunk_id}.nc"));
+            if output_fname.exists(){
+                return Err(anyhow!("{} already processed", chunk_id));
+            }
+
             let fit_result = fit_inverse_model(p.clone(), inv_opts, ts_chunk.clone());
             match fit_result {
                 Err(e) => {
@@ -137,24 +147,44 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
                         "Error processing {}: {}.  Continuing to next block.",
                         chunk_id, e
                     );
+                    // write a copy of the chunk to an "errors" directory (unless the input data are all NaN)
+                    if ts_chunk.counts.iter().any(|x| x.is_finite()) {
+                        let output_dir = cmd_args.output.join(format!("failed-chunk-{chunk_id}"));
+                        std::fs::create_dir(&output_dir)?;
+                        let csv_fname = output_dir.join("raw-data.csv");
+                        let mut f = File::create(&csv_fname)?;
+                        write_csv(&mut f, ts_chunk)?;
+                        let config_str = toml::to_string(&config).unwrap();
+                        let config_fname = output_dir.join("config.toml");
+                        fs::write(&config_fname, config_str)?;
+                        let output_dir = output_dir.join("deconv-output");
+                        fs::create_dir_all(&output_dir)?;
+                    }
                     Err(anyhow!("Error processing {}: {}.", chunk_id, e))
                 }
                 Ok(fit_results) => {
                     let (t0, t1) = ts_chunk.time_extents_str();
                     let chunk_id = format!("chunk-{t0}-{t1}");
 
-                    let output_fname = cmd_args.output.join(format!("{chunk_id}.nc"));
                     fit_results.to_netcdf(output_fname.clone())?;
+                    info!("Finished processing {}.", chunk_id);
                     Ok::<PathBuf, anyhow::Error>(output_fname)
                 }
             }
         })
         .collect();
 
-    let processed_fnames = match results {
-        Ok(value) => value,
-        Err(e) => return Err(e),
-    };
+    let processed_fnames = results_and_errors
+        .iter()
+        .filter(|itm| itm.is_ok())
+        .map(|itm| itm.as_ref().unwrap())
+        .collect::<Vec<_>>();
+
+    let _errors = results_and_errors
+        .iter()
+        .filter(|itm| itm.is_err())
+        .map(|itm| itm.as_ref().unwrap_err())
+        .collect::<Vec<_>>();
 
     println!(
         "Processed these files: {:?}",
