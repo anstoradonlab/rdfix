@@ -139,7 +139,16 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
                 return Err(anyhow!("{} already processed", chunk_id));
             }
 
-            let fit_result = fit_inverse_model(p.clone(), inv_opts, ts_chunk.clone());
+            let panic_wrapper = std::panic::catch_unwind(||  fit_inverse_model(p.clone(), inv_opts, ts_chunk.clone()));
+            let fit_result = if panic_wrapper.is_ok(){
+                panic_wrapper.unwrap()
+            } 
+            else {
+                // Panic occurred.  The panic message still gets printed out, so convert the error into 
+                // something we can use later and continue. 
+                let e = panic_wrapper.unwrap_err();
+                Err(anyhow!("{:?}", e))
+            };
             match fit_result {
                 Err(e) => {
                     let chunk_id = ts_chunk.chunk_id();
