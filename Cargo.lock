@@ -1271,12 +1271,11 @@ dependencies = [
 
 [[package]]
 name = "netcdf"
-version = "0.8.3"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b5c16156122fd428e28e67d29ca3b503f9d6da5ba9932e631d309ba50071397"
+checksum = "2341b9beee0c9d83d68edd36b2c23f2fc76a4c04b991944d68f88af6e0b38cdd"
 dependencies = [
  "bitflags 1.3.2",
- "lazy_static",
  "ndarray",
  "netcdf-sys",
 ]
@@ -1294,9 +1293,9 @@ dependencies = [
 
 [[package]]
 name = "netcdf-sys"
-version = "0.5.1"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2dfe2cacf1623a0f51f93d2cfd90386ad40b3daff596f5058ec3037c432c772"
+checksum = "3fc585a3c0dfd225183529a402667bd48f7ac14c0bcaf3e1336fb7f8ccdaa1db"
 dependencies = [
  "curl-sys",
  "hdf5-sys",
