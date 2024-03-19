@@ -61,6 +61,7 @@ wild = "2.1.0"
 toml = "0.7.6"
 rand_chacha = "0.3"
 approx = "0.5.1"
+claim = "0.5.0"
 
 #finitediff = {version="0.1.4", features = ["ndarray"]}
 #ode_solvers = "0.3"

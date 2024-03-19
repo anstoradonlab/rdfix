@@ -1155,7 +1155,7 @@ pub fn fit_inverse_model(
     // 2. Optimisation (MAP)
 
     let map_radon = if inv_opts.report_map {
-        info!("Searching for MAP");
+        info!("Searching for maximum a posteriori (MAP)");
         let niter = inv_opts.map_search_iterations;
         // COBYLA solver version
         let cob_inverse_model = CobylaDetectorInverseModel(inverse_model.clone());
