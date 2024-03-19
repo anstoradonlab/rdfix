@@ -6,7 +6,7 @@ pre-build = [                                  # additional commands to run prio
 #    "echo HTTP_PROXY: $HTTP_PROXY",
 #    "yum update -y",
     "yum install -y epel-release",  # extra packages for enterprise linux (for openblas)
-    "yum update -y",
+#    "yum update -y",
     "yum install -y cmake openssl-devel blas-devel.x86_64 openblas-devel.x86_64"  # blas-devel is the netlib version, may not be required
 ]               
 
