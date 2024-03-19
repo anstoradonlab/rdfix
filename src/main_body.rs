@@ -8,6 +8,7 @@ use rayon::prelude::*;
 
 use crate::appconfig::AppConfigBuilder;
 use crate::inverse::fit_inverse_model;
+use crate::postproc::postproc;
 use crate::{cmdline::*, read_csv, TestTimeseries, TimeExtents, TimeseriesKind};
 use crate::{get_test_timeseries, write_csv};
 
@@ -136,18 +137,19 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
         .map(|ts_chunk| {
             let chunk_id = ts_chunk.chunk_id();
             let output_fname = cmd_args.output.join(format!("{chunk_id}.nc"));
-            if output_fname.exists(){
+            if output_fname.exists() {
                 info!("{} already processed, skipping to next chunk", chunk_id);
-                return Ok::<PathBuf, anyhow::Error>(output_fname)
+                return Ok::<PathBuf, anyhow::Error>(output_fname);
             }
 
-            let panic_wrapper = std::panic::catch_unwind(||  fit_inverse_model(p.clone(), inv_opts, ts_chunk.clone()));
-            let fit_result = if panic_wrapper.is_ok(){
+            let panic_wrapper = std::panic::catch_unwind(|| {
+                fit_inverse_model(p.clone(), inv_opts, ts_chunk.clone())
+            });
+            let fit_result = if panic_wrapper.is_ok() {
                 panic_wrapper.unwrap()
-            } 
-            else {
-                // Panic occurred.  The panic message still gets printed out, so convert the error into 
-                // something we can use later and continue. 
+            } else {
+                // Panic occurred.  The panic message still gets printed out, so convert the error into
+                // something we can use later and continue.
                 let e = panic_wrapper.unwrap_err();
                 Err(anyhow!("{:?}", e.downcast_ref::<&str>()))
             };
@@ -203,6 +205,30 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
             .iter()
             .map(|itm| itm.display())
             .collect::<Vec<_>>()
+    );
+
+    let output_fname = cmd_args.output.join("summary.nc");
+    let _pproc = postproc(
+        processed_fnames.clone(),
+        config.inversion.overlapsize,
+        output_fname,
+        None,
+    );
+
+    let output_fname = cmd_args.output.join("summary_30min_average.nc");
+    let _pproc = postproc(
+        processed_fnames.clone(),
+        config.inversion.overlapsize,
+        output_fname,
+        Some(30),
+    );
+
+    let output_fname = cmd_args.output.join("summary_60min_average.nc");
+    let _pproc = postproc(
+        processed_fnames.clone(),
+        config.inversion.overlapsize,
+        output_fname,
+        Some(60),
     );
 
     Ok(())

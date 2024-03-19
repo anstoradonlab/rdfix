@@ -47,7 +47,7 @@ pub struct DeconvArgs {
     pub output: PathBuf,
 
     /// Try to continue execution, for instance if a previous run was interrupted
-    #[arg(long="continue", default_value_t=false)]
+    #[arg(long = "continue", default_value_t = false)]
     pub cont: bool,
 
     /// Input files

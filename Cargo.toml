@@ -52,7 +52,7 @@ argmin_testfunctions = "0.1.1"
 nuts-rs = "0.6"
 thiserror = "1.0"
 rayon = "1.7.0"
-netcdf = { version = "0.8.1", features = ["ndarray", "static"] }
+netcdf = { version = "0.9", features = ["ndarray", "static"] }
 tempfile = "3.6.0"
 chrono = { version = "0.4.26", features = ["serde"] }
 lazy_static = "1.4.0"

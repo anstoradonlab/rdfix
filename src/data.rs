@@ -91,7 +91,7 @@ impl DataSet {
 
             let var = &mut file.add_variable::<f64>(&v.name, &dim_names)?;
             for (name, val) in v.attr.iter() {
-                var.add_attribute(name.as_str(), val.as_str())?;
+                var.put_attribute(name.as_str(), val.as_str())?;
             }
         }
         for v in self.vars.iter() {

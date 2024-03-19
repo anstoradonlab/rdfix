@@ -7,6 +7,7 @@ pub mod forward;
 pub mod inverse;
 pub mod main_body;
 pub mod nuts;
+pub mod postproc;
 
 //use std::ops::{Add, Div, Mul, Sub};
 

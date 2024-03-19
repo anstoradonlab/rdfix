@@ -66,6 +66,8 @@ pub const NUM_VARYING_PARAMETERS: usize = 2;
 pub enum InverseModelError {
     #[error("no valid observational data")]
     NoObservations,
+    #[error("counts are zero over entire time period")]
+    ZeroCounts,
     #[error("invalid value encountered when computing prior")]
     InvalidPrior { reference: String },
     #[error("unknown inverse model error")]
@@ -1071,6 +1073,10 @@ pub fn fit_inverse_model(
 
     // Data, which will output at the end of the function
     let mut data: Vec<GridVariable> = vec![];
+
+    if ts.counts.iter().fold(0.0, |x, y| x + y) == 0.0 {
+        return Err(InverseModelError::ZeroCounts.into());
+    }
 
     // Radon concentration, simple calculation without deconvolution
     let initial_radon = calc_radon_without_deconvolution(&ts, time_step);
