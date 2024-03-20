@@ -199,14 +199,6 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
         .map(|itm| itm.as_ref().unwrap_err())
         .collect::<Vec<_>>();
 
-    println!(
-        "Processed these files: {:?}",
-        processed_fnames
-            .iter()
-            .map(|itm| itm.display())
-            .collect::<Vec<_>>()
-    );
-
     let output_fname = cmd_args.output.join("summary.nc");
     let _pproc = postproc(
         processed_fnames.clone(),

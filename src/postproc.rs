@@ -275,7 +275,11 @@ where
 
     //TODO: replace with iteration
     for f in filenames {
-        println!("{:?}", f);
+        if let Some(tau_out) = avg_duration {
+            info!("Postprocessing (avg period {} sec) {:?}", tau_out, f);
+        } else {
+            info!("Postprocessing {:?}", f);
+        };
         let nc = netcdf::open(f)?;
 
         if first_file {
@@ -318,12 +322,8 @@ where
                         let extents = calc_time_dim_extents(&v, idx0, idx1);
                         data = v.get::<f64, _>(extents.clone())?;
                         let values_avg = if is_instantaneous_variable(&v) {
-                            let vname = v.name();
-                            dbg!(vname);
                             time_average_instantaneous(data.as_slice().unwrap(), tau_in, tau_out)
                         } else {
-                            let vname = v.name();
-                            dbg!("Not inst", vname);
                             time_average(data.as_slice().unwrap(), tau_in, tau_out)
                         };
                         assert_eq!(ntime_out, values_avg.len());
@@ -335,8 +335,8 @@ where
                         if v.name() == "time" {
                             // If this was the "time" variable then also write the convenience variables
                             let interval_mid = ndarray::Array1::from_vec(values_avg);
-                            let interval_end = interval_mid.clone() + ((tau_out as f64)/2.0);
-                            let interval_start = interval_mid.clone() - ((tau_out as f64)/2.0);
+                            let interval_end = interval_mid.clone() + ((tau_out as f64) / 2.0);
+                            let interval_start = interval_mid.clone() - ((tau_out as f64) / 2.0);
                             let mut vout_t0 = ncout.variable_mut("interval_start").unwrap();
                             vout_t0.put(extents_out.clone(), interval_start.view())?;
                             let mut vout_tm = ncout.variable_mut("interval_mid").unwrap();
@@ -344,7 +344,6 @@ where
                             let mut vout_t1 = ncout.variable_mut("interval_end").unwrap();
                             vout_t1.put(extents_out.clone(), interval_end.view())?;
                         }
-
                     } else {
                         // construct a slice which covers all except for the overlap points, ie. [num_overlap..(N-num_overlap), .., ..]
                         let (extents, extents_out) =
@@ -425,7 +424,6 @@ where
                             )
                             .collect();
                         let vout_name = format!("{}{}", v.name(), suffix);
-                        info!("{}", vout_name);
                         let mut vout = ncout.variable_mut(&vout_name).unwrap();
                         vout.put_values(&var_percentile, extents_out.clone())?;
                     }
@@ -447,7 +445,6 @@ where
                     let var_percentile = Data::new(x.as_slice_mut().unwrap()).quantile(q);
                     let values = vec![var_percentile; ntime_out];
                     let vout_name = format!("{}{}", v.name(), suffix);
-                    info!("{}", vout_name);
                     let mut vout = ncout.variable_mut(&vout_name).unwrap();
                     vout.put_values(&values, extents_out.clone())?;
                 }
