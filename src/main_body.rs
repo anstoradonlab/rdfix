@@ -220,7 +220,7 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
         processed_fnames.clone(),
         config.inversion.overlapsize,
         output_fname,
-        Some(30*60),
+        Some(30 * 60),
     );
 
     let output_fname = cmd_args.output.join("summary_60min_average.nc");
@@ -228,7 +228,7 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
         processed_fnames.clone(),
         config.inversion.overlapsize,
         output_fname,
-        Some(60*60),
+        Some(60 * 60),
     );
 
     Ok(())
