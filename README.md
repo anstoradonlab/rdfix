@@ -2,9 +2,16 @@
 
 Perform a response time correction on two-filter dual-flow-loop radon detector output using the method from https://doi.org/10.5194/amt-9-2689-2016
 
+This is a re-write of [a Python-based code](https://github.com/agriff86/rd-deconvolve) into rust and it's (hopefully) a much nicer to install and use.  It's my first attempt at using rust, so the code iteself is pretty
+horrible.
+
+Currently the algorithm uses an MCMC sampler based on [hammer_and_sample](https://docs.rs/hammer-and-sample/latest/hammer_and_sample/) which itself is based on [EMCEE](https://emcee.readthedocs.io/en/stable/), the sampler used in the Python version of this code.
+
+An option for using a No U-Turn Sampler, [NUTS](https://docs.rs/nuts-rs/latest/nuts_rs/), is in development but will probably rely on [Enzyme](https://enzyme.mit.edu/) for auto-differentiation.
+
 ## Installation
 
-**Note:** rdfix is currently linux-only.
+**Note:** `rdfix-deconvolve` binaries are built for Linux and Windows, but compiling for Mac should be straightforward.
 
 ### From binary
 
@@ -12,35 +19,31 @@ Download a binary from GitHub Releases and put a copy in your `$PATH`.
 
 ### From source
 
-Prerequisites are:
+Rust is required to compile from source.  
 
-1. rust compiler,
-2. openblas package
-
-Openblas can be installed with a command like
+First, [install rust](https://www.rust-lang.org/tools/install).  Then, execute
 
 ```bash
-sudo apt install -y libopenblas-dev   # Debian, Ubuntu, ...
-```
-or
-```bash
-sudo yum install -y openblas-devel.x86_64   # Fedora, Centos, ...
+cargo install --locked --git https://github.com/anstoradonlab/rdfix.git
 ```
 
+to download the clone the repository, compile the `rdfix-deconvolve` binary, and copy to a place in your `$PATH`.  To do these three steps manually:
 
-Clone the repository, 
+ clone the repository, 
 
 ```bash
 git clone https://github.com
 ```
 
-Compile using cargo
+finally compile using cargo
 
 ```bash
 cargo build --release
 ```
 
-Then copy the binary from `target/release/rdfix-deconvolve` to a place in your `$PATH`.
+then copy the binary from `target/release/rdfix-deconvolve` to a place in your `$PATH`.
+
+
 
 ## Quick start rddeconv
 
@@ -60,7 +63,7 @@ The command for running deconvolution will be printed in the terminal window.  I
 rdfix-deconvolve deconv --config test/config.toml --output test/deconv-output test/raw-data.csv
 ```
 
-The sampling stage of deconvolution runs in parallel and uses all available CPU cores.  It's computationally expensive, taking about a minute to execute this one-day test case with 20 cores available.
+The sampling stage of deconvolution runs in parallel and uses all available CPU cores.  It's computationally expensive, taking about three minutes to execute on my 4-core laptop.
 
 ### 3 Set up a template for your own data
 
