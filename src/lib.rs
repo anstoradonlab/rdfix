@@ -159,7 +159,7 @@ impl From<IoInputRecord> for InputRecord {
 impl From<InputRecord> for IoInputRecord {
     fn from(itm: InputRecord) -> Self {
         // TODO: calculate properly
-        let secs = Duration::seconds(itm.time.round() as i64);
+        let secs = Duration::try_seconds(itm.time.round() as i64).unwrap();
         let nanosecs = Duration::nanoseconds(((itm.time - itm.time.round()) * 1e9) as i64);
         let time: NaiveDateTime = *REFERENCE_TIME + secs + nanosecs;
         IoInputRecord {
@@ -370,8 +370,8 @@ pub trait TimeExtents {
 impl TimeExtents for InputRecordVec {
     fn time_extents(&self) -> (NaiveDateTime, NaiveDateTime) {
         let t: NaiveDateTime = *REFERENCE_TIME;
-        let t0 = t + chrono::TimeDelta::seconds(self.time[0].round() as i64);
-        let t1 = t + chrono::TimeDelta::seconds(self.time[self.len() - 1].round() as i64);
+        let t0 = t + chrono::TimeDelta::try_seconds(self.time[0].round() as i64).unwrap();
+        let t1 = t + chrono::TimeDelta::try_seconds(self.time[self.len() - 1].round() as i64).unwrap();
         (t0, t1)
     }
 

@@ -17,7 +17,6 @@ derive_builder = "0.20"
 rdfix_gf = {path="./rdfix_gf"}
 statrs = "0.16"
 autodifflib = {package="autodiff", version="0.7"}
-#autodiff = {path="/home/alan/code/enzyme-rust/library/autodiff"}
 anyhow = "1.0"
 env_logger = "0.10"
 log = "0.4"
@@ -60,7 +59,7 @@ thiserror = "1.0"
 rayon = "1.7.0"
 netcdf = { version = "0.9", features = ["ndarray", "static"] }
 tempfile = "3.6.0"
-chrono = { version = "0.4.26", features = ["serde"] }
+chrono = { version = "0.4", features = ["serde"] }
 lazy_static = "1.4.0"
 clap = { version = "4.3.17", features = ["derive", "string"] }
 wild = "2.1.0"
