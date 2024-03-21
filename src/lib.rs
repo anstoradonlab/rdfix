@@ -418,7 +418,7 @@ impl TestTimeseries {
         Self {
             npts: n,
             trec: InputRecord::default(),
-            kind: kind,
+            kind,
         }
     }
 

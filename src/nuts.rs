@@ -48,7 +48,7 @@ impl PosteriorDensity {
             .build()
             .expect("Failed to build detector model");
         let inverse_model: DetectorInverseModel = DetectorInverseModel {
-            p: p,
+            p,
             inv_opts,
             ts,
             fwd,
@@ -148,7 +148,7 @@ fn lnprob_nuts_wrapper(
     theta: &[f64],
 ) -> f64 {
     let inv: DetectorInverseModel = DetectorInverseModel {
-        p: p,
+        p,
         inv_opts: helper.to_inv_opts(),
         ts: ts.clone(),
         fwd,
@@ -166,7 +166,7 @@ fn d_lnprob_nuts_wrapper(
     _theta: &[f64],
     _grad: &mut [f64],
     _tangent: f64,
-) -> () {
+) {
     unimplemented!();
 }
 

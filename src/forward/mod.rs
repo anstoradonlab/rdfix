@@ -511,9 +511,9 @@ fn calc_eff_and_recoil_prob(
     v_tank: f64,
     total_efficiency: f64,
 ) -> (f64, f64) {
-    let recoil_prob = f64::from(0.5) * (f64::from(1.0) - rs);
-    let eff = f64::from(1.0);
-    let lamrn = f64::from(LAMRN);
+    let recoil_prob = 0.5 * (1.0 - rs);
+    let eff = 1.0;
+    let lamrn = LAMRN;
 
     // Note: do not account for radioactive decay in delay volumes because of what happens when
     // q_external -> 0.0.  Instead, we're saying that the efficiency is determined relative to
@@ -521,10 +521,10 @@ fn calc_eff_and_recoil_prob(
     // TODO: q_external here should be a "reference" flow rate
 
     // account for radioactive decay in delay volumes (typical effect size: 0.3%)
-    let radon0 = f64::from(1.0);
-    let rn_d1 = radon0 / (lamrn * v_delay_1 / q_external + f64::from(1.0));
-    let rn_d2 = rn_d1 / (lamrn * v_delay_2 / q_external + f64::from(1.0));
-    let rn = rn_d2 / (lamrn * v_tank / q_external + f64::from(1.0));
+    let radon0 = 1.0;
+    let rn_d1 = radon0 / (lamrn * v_delay_1 / q_external + 1.0);
+    let rn_d2 = rn_d1 / (lamrn * v_delay_2 / q_external + 1.0);
+    let rn = rn_d2 / (lamrn * v_tank / q_external + 1.0);
     //let rn = radon0; // TODO: come up with a better approach
 
     // This call to steady_state_count_rate takes about 20-30% of the total time spent evaluating the
@@ -586,7 +586,7 @@ impl DetectorForwardModel {
         }
 
         // Generic versions of constants
-        let lamrn_p = f64::from(LAMRN);
+        let lamrn_p = LAMRN;
 
         // Initial state has everything in equilibrium with first radon value
         // radon, atoms/m3
@@ -597,7 +597,7 @@ impl DetectorForwardModel {
         // 1 cc/hour converted to m3/sec
         let q_fill_value = (1.0 / 1000.0) / 3600.0;
 
-        let q_external = (f64::from(self.data.q_external[0]) * self.p.exflow_scale)
+        let q_external = (self.data.q_external[0] * self.p.exflow_scale)
             .clamp(q_fill_value, f64::MAX);
         let r_screen = self.p.r_screen * self.p.r_screen_scale;
 
@@ -618,11 +618,11 @@ impl DetectorForwardModel {
             qi_i,
             r_screen,
             self.p.plateout_time_constant,
-            f64::from(qe_i),
+            qe_i,
             self.p.volume_delay_1,
             self.p.volume_delay_2,
             self.p.volume,
-            f64::from(self.data.sensitivity[0]),
+            self.data.sensitivity[0],
         );
         let (fa_1bq, fb_1bq, fc_1bq) = gf::num_filter_atoms_steady_state(
             qi_i,
@@ -674,14 +674,14 @@ impl DetectorForwardModel {
         let mut expected_counts = Vec::with_capacity(num_intervals + 1);
         let mut y_out = Vec::with_capacity(num_intervals + 1);
         // for the first output point, report the initial state
-        y_out.push(state.clone());
+        y_out.push(state);
         for _ in 0..num_intervals {
             state[IDX_ACC_COUNTS] = 0.0;
             integrate(&mut state, self, t, t + dt, num_steps);
             // TODO: maybe just return the expected counts??
             expected_counts.push(state[IDX_ACC_COUNTS]);
             y_out.push(state);
-            t = t + dt;
+            t += dt;
         }
 
         Ok(y_out)

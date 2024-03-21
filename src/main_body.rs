@@ -165,13 +165,13 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
                         let output_dir = cmd_args.output.join(format!("failed-chunk-{chunk_id}"));
                         std::fs::create_dir(&output_dir)?;
                         let csv_fname = output_dir.join("raw-data.csv");
-                        let mut f = File::create(&csv_fname)?;
+                        let mut f = File::create(csv_fname)?;
                         write_csv(&mut f, ts_chunk)?;
                         let config_str = toml::to_string(&config).unwrap();
                         let config_fname = output_dir.join("config.toml");
-                        fs::write(&config_fname, config_str)?;
+                        fs::write(config_fname, config_str)?;
                         let output_dir = output_dir.join("deconv-output");
-                        fs::create_dir_all(&output_dir)?;
+                        fs::create_dir_all(output_dir)?;
                     }
                     Err(anyhow!("Error processing {}: {}.", chunk_id, e))
                 }
@@ -187,7 +187,7 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
         })
         .collect();
 
-    let processed_fnames = results_and_errors
+        let processed_fnames = results_and_errors
         .iter()
         .filter(|itm| itm.is_ok())
         .map(|itm| itm.as_ref().unwrap())

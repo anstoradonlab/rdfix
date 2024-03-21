@@ -36,36 +36,36 @@ const ACC: f64 = 10e-11;
 #[inline(always)]
 pub fn ln_gamma(x: f64) -> f64 {
     // Auxiliary variable when evaluating the `gamma_ln` function
-    let GAMMA_R = f64::from(10.900511);
+    let GAMMA_R = 10.900511;
 
     // Polynomial coefficients for approximating the `gamma_ln` function
     let GAMMA_DK: &[f64] = &[
-        f64::from(2.48574089138753565546e-5),
-        f64::from(1.05142378581721974210),
-        f64::from(-3.45687097222016235469),
-        f64::from(4.51227709466894823700),
-        f64::from(-2.98285225323576655721),
-        f64::from(1.05639711577126713077),
-        f64::from(-1.95428773191645869583e-1),
-        f64::from(1.70970543404441224307e-2),
-        f64::from(-5.71926117404305781283e-4),
-        f64::from(4.63399473359905636708e-6),
-        f64::from(-2.71994908488607703910e-9),
+        2.48574089138753565546e-5,
+        1.05142378581721974210,
+        (-3.45687097222016235469),
+        4.51227709466894823700,
+        (-2.98285225323576655721),
+        1.05639711577126713077,
+        (-1.95428773191645869583e-1),
+        1.70970543404441224307e-2,
+        (-5.71926117404305781283e-4),
+        4.63399473359905636708e-6,
+        (-2.71994908488607703910e-9),
     ];
 
-    if x < f64::from(0.5) {
+    if x < 0.5 {
         let s = GAMMA_DK
             .iter()
             .enumerate()
             .skip(1)
             .fold(GAMMA_DK[0], |s, t| s + *t.1 / ((t.0 as f64) - x));
 
-        f64::from(LN_PI)
-            - (f64::from(f64::consts::PI) * x).sin().ln()
+        LN_PI
+            - (f64::consts::PI * x).sin().ln()
             - s.ln()
-            - f64::from(LN_2_SQRT_E_OVER_PI)
-            - (f64::from(0.5) - x)
-                * ((f64::from(0.5) - x + GAMMA_R) / f64::from(f64::consts::E)).ln()
+            - LN_2_SQRT_E_OVER_PI
+            - (0.5 - x)
+                * ((0.5 - x + GAMMA_R) / f64::consts::E).ln()
     } else {
         let s = GAMMA_DK
             .iter()
@@ -74,9 +74,9 @@ pub fn ln_gamma(x: f64) -> f64 {
             .fold(GAMMA_DK[0], |s, t| s + *t.1 / (x + (t.0 as f64) - 1.0));
 
         s.ln()
-            + f64::from(LN_2_SQRT_E_OVER_PI)
-            + (x - f64::from(0.5))
-                * ((x - f64::from(0.5) + GAMMA_R) / f64::from(f64::consts::E)).ln()
+            + LN_2_SQRT_E_OVER_PI
+            + (x - 0.5)
+                * ((x - 0.5 + GAMMA_R) / f64::consts::E).ln()
     }
 }
 
@@ -94,10 +94,10 @@ pub fn lognormal_ln_pdf(location: f64, scale: f64, x: f64) -> f64 {
     const LN_SQRT_2PI: f64 = 0.91893853320467274178032973640561763986139747363778;
 
     if x <= 0.0 || x.is_infinite() {
-        f64::from(f64::NEG_INFINITY)
+        f64::NEG_INFINITY
     } else {
         let d = (x.ln() - location) / scale;
-        (-f64::from(0.5) * d * d) - f64::from(LN_SQRT_2PI) - (x * scale).ln()
+        (-0.5 * d * d) - LN_SQRT_2PI - (x * scale).ln()
     }
 }
 
@@ -110,7 +110,7 @@ pub fn normal_ln_pdf(location: f64, scale: f64, x: f64) -> f64 {
     const LN_SQRT_2PI: f64 = 0.91893853320467274178032973640561763986139747363778;
 
     let d = (x - location) / scale;
-    (-f64::from(0.5) * d * d) - f64::from(LN_SQRT_2PI) - scale.ln()
+    (-0.5 * d * d) - LN_SQRT_2PI - scale.ln()
 }
 
 /*

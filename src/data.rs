@@ -20,7 +20,7 @@ impl GridVariable {
         dims: &[&str],
         attr: Option<HashMap<String, String>>,
     ) -> Self {
-        let attr = attr.unwrap_or(HashMap::new());
+        let attr = attr.unwrap_or_default();
         let mut dimensions = vec![];
         for itm in dims {
             dimensions.push(itm.to_string());
@@ -76,7 +76,7 @@ impl DataSet {
     }
 
     pub fn to_netcdf(&self, f: PathBuf) -> Result<()> {
-        let mut file = netcdf::create(&f)?;
+        let mut file = netcdf::create(f)?;
         // -- classic mode doesn't seem to work
         //let mut file = netcdf::create_with(&f, netcdf::Options::CLASSIC)?;
         for (dim_name, dim_len) in self.all_dimensions() {

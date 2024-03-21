@@ -27,9 +27,9 @@ pub fn integrate(
     // k4 = f(tn + h, yn + h*k3)
     // Ref: https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_methods
     let mut t = t0;
-    let two = f64::from(2.0);
-    let half = f64::from(0.5);
-    let sixth = f64::from(1.0 / 6.0);
+    let two = 2.0;
+    let half = 0.5;
+    let sixth = 1.0 / 6.0;
     let h = (t1 - t0) / (num_steps as f64);
     let half_h = half * h;
     for _ in 0..num_steps {
@@ -56,10 +56,10 @@ pub fn integrate(
 
         // sum result
         for (s, k1, k2, k3, k4) in izip!(&mut state_work, &k1, &k2, &k3, &k4) {
-            *s = *s + h * sixth * (*k1 + two * *k2 + two * *k3 + *k4);
+            *s += h * sixth * (*k1 + two * *k2 + two * *k3 + *k4);
         }
 
-        t = t + h;
+        t += h;
     }
 
     #[allow(clippy::manual_memcpy)]

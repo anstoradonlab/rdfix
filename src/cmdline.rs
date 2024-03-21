@@ -142,13 +142,11 @@ pub fn parse_cmdline() -> Result<RdfixArgs> {
                         ));
                     }
                     let is_empty = args.output.read_dir()?.next().is_none();
-                    if !is_empty {
-                        if !args.cont {
-                            return Err(anyhow!(
-                                "Output directory \"{0}\" is not empty",
-                                args.output.display()
-                            ));
-                        };
+                    if !is_empty && !args.cont {
+                        return Err(anyhow!(
+                            "Output directory \"{0}\" is not empty",
+                            args.output.display()
+                        ));
                     }
                 }
             }

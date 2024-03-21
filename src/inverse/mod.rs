@@ -136,7 +136,7 @@ pub fn transform_radon_concs1(radon_conc: &mut [f64]) -> Result<()> {
     let n = radon_conc.len();
     let mut rnsum = 0.0;
     for itm in radon_conc.iter() {
-        rnsum = *itm + rnsum;
+        rnsum += *itm;
     }
 
     let mut acc = rnsum;
@@ -147,7 +147,7 @@ pub fn transform_radon_concs1(radon_conc: &mut [f64]) -> Result<()> {
         let tmp = radon_conc[ii];
         radon_conc[ii] = tmp_prev;
         tmp_prev = transform_constrained_to_unconstrained(tmp / acc);
-        acc = acc - tmp;
+        acc -= tmp;
     }
     radon_conc[n - 1] = tmp_prev;
 
@@ -165,7 +165,7 @@ pub fn inverse_transform_radon_concs1(p: &mut [f64]) -> Result<()> {
     for ii in 0..(n - 1) {
         let rn = transform_unconstrained_to_constrained(p[ii + 1]) * acc;
         p[ii] = rn;
-        acc = acc - rn;
+        acc -= rn;
     }
     p[n - 1] = acc;
 
@@ -443,7 +443,7 @@ impl DetectorInverseModel {
             map_radon_transformed.as_slice(),
             self.p.clone(),
             self.ts.clone(),
-            self.inv_opts.clone(),
+            self.inv_opts,
         );
 
         // Burn in samples - starting at MAP (+/- a small factor)
@@ -690,24 +690,24 @@ impl DetectorInverseModel {
 
         // Lognormal priors
         let r_screen_scale_mu = 1.0f64.ln();
-        let r_screen_scale_sigma = f64::from(self.inv_opts.r_screen_sigma);
-        lprior = lprior + lognormal_ln_pdf(r_screen_scale_mu, r_screen_scale_sigma, r_screen_scale);
+        let r_screen_scale_sigma = self.inv_opts.r_screen_sigma;
+        lprior += lognormal_ln_pdf(r_screen_scale_mu, r_screen_scale_sigma, r_screen_scale);
 
         // TODO: get exflow from data instead of from the parameters
         let exflow_scale_mu = 1.0f64.ln();
-        let exflow_sigma = f64::from(self.inv_opts.exflow_sigma);
-        lprior = lprior + lognormal_ln_pdf(exflow_scale_mu, exflow_sigma, exflow_scale);
+        let exflow_sigma = self.inv_opts.exflow_sigma;
+        lprior += lognormal_ln_pdf(exflow_scale_mu, exflow_sigma, exflow_scale);
 
         // Normal priors on parameters
         let r_screen_scale_mu = 1.0;
-        let r_screen_scale_sigma = f64::from(self.inv_opts.r_screen_sigma);
-        lprior = lprior + normal_ln_pdf(r_screen_scale_mu, 1.0, r_screen_scale);
+        let r_screen_scale_sigma = self.inv_opts.r_screen_sigma;
+        lprior += normal_ln_pdf(r_screen_scale_mu, 1.0, r_screen_scale);
 
         let r_screen_scale = (r_screen_scale - 1.0) * r_screen_scale_sigma + 1.0;
 
         let exflow_scale_mu = 1.0;
-        let exflow_sigma = f64::from(self.inv_opts.exflow_sigma);
-        lprior = lprior + normal_ln_pdf(exflow_scale_mu, 1.0, exflow_scale);
+        let exflow_sigma = self.inv_opts.exflow_sigma;
+        lprior += normal_ln_pdf(exflow_scale_mu, 1.0, exflow_scale);
 
         let exflow_scale = (exflow_scale - 1.0) * exflow_sigma + 1.0;
 
@@ -731,7 +731,7 @@ impl DetectorInverseModel {
                 let ten = 10.0;
 
                 for u in radon_transformed {
-                    lprior = lprior + normal_ln_pdf(0.0, ten, *u);
+                    lprior += normal_ln_pdf(0.0, ten, *u);
                 }
 
                 // for good measure, also clip this parameter to [-100, 100]
@@ -752,7 +752,7 @@ impl DetectorInverseModel {
                     .map(|x| {
                         let (x_t, lp_inc) = exp_transform(*x);
                         // increment lp because of the change-of-variables
-                        lp = lp - lp_inc;
+                        lp -= lp_inc;
                         x_t * radon_reference_value
                     })
                     .collect();
@@ -831,7 +831,7 @@ impl DetectorInverseModel {
 
         assert!(lprior.is_finite());
 
-        lp = lp + lprior;
+        lp += lprior;
 
         // Likelihood
         let mut fwd = self.fwd.clone();
@@ -845,7 +845,7 @@ impl DetectorInverseModel {
             Ok(counts) => counts,
             Err(e) => {
                 println!("Forward model failed: {:?}, \n{:?}", e, fwd_copy);
-                return -f64::from(f64::INFINITY);
+                return -f64::INFINITY;
             }
         };
 
@@ -895,7 +895,7 @@ impl DetectorInverseModel {
                 );
             }
             assert!(lp_inc.is_finite());
-            lp = lp + lp_inc;
+            lp += lp_inc;
             // println!(" *** expected (from model) = {:?} observed = {:?} lp_increment = {:?} {:?}", *cex, *cobs, lp_inc, radon);
         }
         assert!(lp.is_finite());
@@ -1025,7 +1025,7 @@ pub fn calc_radon_without_deconvolution(ts: &InputTimeSeries, time_step: f64) ->
 }
 
 fn can_quantise(values: &[f64], threshold: f64) -> bool {
-    if values.len() == 0 {
+    if values.is_empty() {
         return false;
     }
     // Unwrap: Ok, we've checked for zero-length slice
@@ -1040,7 +1040,7 @@ fn can_quantise(values: &[f64], threshold: f64) -> bool {
     (maxval - minval) / ((maxval.abs() + minval.abs()) / 2.0) > threshold
 }
 
-fn quantise(values: &mut [f64]) -> () {
+fn quantise(values: &mut [f64]) {
     let mean_value = values.iter().fold(0.0, |a, b| a + b) / (values.len() as f64);
     for x in values.iter_mut() {
         *x = mean_value;
@@ -1146,7 +1146,7 @@ pub fn fit_inverse_model(
         .build()
         .expect("Failed to build detector model");
     let inverse_model: DetectorInverseModel = DetectorInverseModel {
-        p: p,
+        p,
         inv_opts,
         ts: ts.clone(),
         fwd,
@@ -1212,7 +1212,7 @@ pub fn fit_inverse_model(
 
         SamplerKind::Nuts => {
             //Enzyme version
-            let _sampler_output = inverse_model.nuts_sample(2000, None)?;
+            inverse_model.nuts_sample(2000, None)?;
 
             // Autodiff (library) version
             // let _sampler_output = inverse_model.nuts_sample(2000, None)?;

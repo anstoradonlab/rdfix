@@ -18,8 +18,8 @@ fn is_mcmc_variable(v: &netcdf::Variable) -> bool {
 // time average).
 // TODO: handle this better, it's presently hard-coded
 fn is_instantaneous_variable(v: &netcdf::Variable) -> bool {
-    let is_mcmc = is_mcmc_variable(&v);
-    let has_tdim = !needs_time_dim(&v);
+    let is_mcmc = is_mcmc_variable(v);
+    let has_tdim = !needs_time_dim(v);
     let inst_names = ["map_radon", "model_time", "time"];
     let vname = v.name();
     has_tdim && (is_mcmc || inst_names.into_iter().any(|x| x == vname))
@@ -289,7 +289,7 @@ where
             // TODO: on second file, and etc., validate structure
         }
 
-        let ntime_in = nc.dimension(&"time").unwrap().len();
+        let ntime_in = nc.dimension("time").unwrap().len();
         let ntime_out = if avg_duration.is_some() {
             (ntime_in - num_overlap - num_overlap) / (avg_duration.unwrap() / tau_in)
         } else {
