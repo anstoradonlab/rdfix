@@ -29,9 +29,13 @@ serde = { version = "1", features = ["derive"] }
 #blas-src = { version = "0.8", features = ["netlib"] }
 
 ## 2. use openblas (system library, faster compile. Still statically links openblas.)
-ndarray = { version = "0.15", features = ["blas", "serde"] }
-blas-src = { version = "0.8", features = ["openblas"] }
-openblas-src = { version = "0.10", features = ["cblas", "system"] }
+#ndarray = { version = "0.15", features = ["blas", "serde"] }
+#blas-src = { version = "0.8", features = ["openblas"] }
+#openblas-src = { version = "0.10", features = ["cblas", "system"] }
+
+## 3. use ndarray without blas
+ndarray = { version = "0.15", features = ["serde"] }
+
 
 num = "0.4"
 soa_derive = "0.13"

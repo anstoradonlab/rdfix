@@ -57,7 +57,7 @@ use super::InputTimeSeries;
 use itertools::izip;
 
 // Link to the BLAS C library
-extern crate blas_src;
+// extern crate blas_src;
 
 pub const NUM_VARYING_PARAMETERS: usize = 2;
 
