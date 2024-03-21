@@ -1,10 +1,15 @@
 
 [package]
 name = "rdfix"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 repository = "https://github.com/anstoradonlab/rdfix"
 
+[workspace.package]
+version = "0.1.0"
+
+[workspace.dependencies]
+num-traits = "0.2"
 
 [features]
 default = []
