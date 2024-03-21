@@ -8,7 +8,7 @@ Perform a response time correction on two-filter dual-flow-loop radon detector o
 
 ### From binary
 
-Download a binary from GitHub Releases and put a copy in your `$PATH`.
+Download a binary from GitHub Releases and put a copy in your `$PATH`. 
 
 ### From source
 
