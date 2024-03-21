@@ -1,3 +1,7 @@
+// Silence clippy, the generated code is rather ugly
+#![allow(clippy::all)]
+#![allow(unknown_lints)]
+
 use num_traits::{Float};
 
 /*

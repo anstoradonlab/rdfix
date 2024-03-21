@@ -308,6 +308,7 @@ where
                     // Acceptable to unwrap, we've already made sure to create this variable
                     let mut vout = ncout.variable_mut(&v.name()).unwrap();
                     let data;
+                    #[allow(clippy::single_range_in_vec_init )]
                     let extents_out = vec![tidx_out..tidx_out + ntime_out];
 
                     if let Some(tau_out) = avg_duration {
@@ -406,6 +407,7 @@ where
 
                     let n_points = var_mean.len();
                     assert_eq!(n_points, ntime_out);
+                    #[allow(clippy::single_range_in_vec_init )]
                     let extents_out = vec![tidx_out..tidx_out + ntime_out];
                     ncout
                         .variable_mut(&v.name())
@@ -434,6 +436,7 @@ where
                 let data = v.get::<f64, _>(..)?;
                 let var_mean = data.clone().mean();
                 let values = vec![var_mean; ntime_out];
+                #[allow(clippy::single_range_in_vec_init )]
                 let extents_out = vec![tidx_out..tidx_out + ntime_out];
                 ncout
                     .variable_mut(&v.name())

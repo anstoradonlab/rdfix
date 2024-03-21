@@ -427,7 +427,7 @@ impl TestTimeseries {
         let mut t = 0.0;
         let time_step = 60.0 * 30.0;
         for _ in 0..self.npts {
-            let mut trec = self.trec.clone();
+            let mut trec = self.trec;
             trec.time = t;
             ts.push(trec);
             t += time_step;
