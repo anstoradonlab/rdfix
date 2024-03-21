@@ -1,3 +1,4 @@
+
 [package]
 name = "rdfix"
 version = "0.1.0"
@@ -13,7 +14,7 @@ enzyme_ad = []
 
 [dependencies]
 derive_builder = "0.20"
-rdfix_gf = {path="../rdfix_gf"}
+rdfix_gf = {path="./rdfix_gf"}
 statrs = "0.16"
 autodifflib = {package="autodiff", version="0.7"}
 #autodiff = {path="/home/alan/code/enzyme-rust/library/autodiff"}
@@ -124,7 +125,7 @@ cargo-dist-version = "0.11.1"
 # The installers to generate for each app
 installers = []
 # Target platforms to build apps for (Rust target-triple syntax)
-targets = ["x86_64-unknown-linux-gnu"]
+targets = ["x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
 # CI backends to support
 ci = ["github"]
 # Publish jobs to run in CI
