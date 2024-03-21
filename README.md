@@ -15,11 +15,11 @@ An option for using a No U-Turn Sampler, [NUTS](https://docs.rs/nuts-rs/latest/n
 
 ### From binary
 
-Download a binary from GitHub Releases and put a copy in your `$PATH`.
+This is the easy option, if you just want to run the program.  Download a binary from [GitHub Releases](https://github.com/anstoradonlab/rdfix/releases) and put a copy in your `$PATH`.
 
 ### From source
 
-Rust is required to compile from source.  
+Rust is required for compiling `rdfix-deconvolve` from source.  
 
 First, [install rust](https://www.rust-lang.org/tools/install).  Then, execute
 
