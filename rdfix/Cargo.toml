@@ -77,26 +77,6 @@ claim = "0.5.0"
 #[dev-dependencies]
 #assert_approx_eq = "1.1"
 
-# fat lto for enzyme
-[profile.dev]
-opt-level = 3
-debug = true
-#lto = "fat"
-
-[profile.test]
-opt-level = 3
-debug = true
-#lto = "fat"
-
-[profile.release]
-opt-level = 3
-debug = true
-
-# The profile that 'cargo dist' will build with
-[profile.dist]
-inherits = "release"
-lto = "thin"
-#lto = "fat"
 
 [[bin]]
 name="rdfix-deconvolve"

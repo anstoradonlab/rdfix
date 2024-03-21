@@ -4,3 +4,38 @@ members = [
     "rdfix",
     "rdfix_gf",
 ]
+
+resolver = "2"
+
+# Config for 'cargo dist'
+[workspace.metadata.dist]
+# The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
+cargo-dist-version = "0.11.1"
+# CI backends to support
+ci = ["github"]
+# The installers to generate for each app
+installers = []
+# Target platforms to build apps for (Rust target-triple syntax)
+targets = ["x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
+# Publish jobs to run in CI
+pr-run-mode = "plan"
+
+# The profile that 'cargo dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
+# fat lto for enzyme
+[profile.dev]
+opt-level = 3
+debug = true
+#lto = "fat"
+
+[profile.test]
+opt-level = 3
+debug = true
+#lto = "fat"
+
+[profile.release]
+opt-level = 3
+debug = true
