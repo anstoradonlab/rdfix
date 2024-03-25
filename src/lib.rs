@@ -13,7 +13,7 @@ pub mod postproc;
 
 use anyhow::Result;
 use chrono::{prelude::*, Duration};
-use data::GridVariable;
+use data::{GridVariable, GridVarData};
 use forward::constants::{REFERENCE_TIME, TIME_UNITS};
 use ndarray::ArrayView1;
 use rand::prelude::Distribution;
@@ -357,6 +357,14 @@ impl InputRecordVec {
             );
             data.push(v);
         }
+        let v = GridVariable::new_from_parts(
+            GridVarData::I32(ArrayView1::from(&self.flag).into_owned().into_dyn()),
+            "flag",
+            &["time"],
+            None,
+        );
+        data.push(v);
+
 
         //DataSet::new_from_variables(data)
         data

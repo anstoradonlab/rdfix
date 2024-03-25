@@ -43,6 +43,8 @@ fn main() -> Result<()> {
     dbg!(&inv_results);
     dbg!(soln1);
 
+    /*
+    This interface no longer works
     let radon_map: Vec<_> = inv_results
         .var_ref("map_radon")
         .unwrap()
@@ -53,6 +55,7 @@ fn main() -> Result<()> {
     for (x, y) in radon.iter().zip_eq(radon_map) {
         println!("{x:.2}, {y:.2}, {:.2}", x / y);
     }
+    */
 
     Ok(())
 }

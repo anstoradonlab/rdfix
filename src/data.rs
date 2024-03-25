@@ -1,7 +1,58 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use ndarray::prelude::*;
 
 use std::{collections::HashMap, path::PathBuf};
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum GridVarData {
+    I32(Array<i32, IxDyn>),
+    F64(Array<f64, IxDyn>),
+}
+
+impl GridVarData {
+    pub fn shape(&self) -> &[usize] {
+        match self {
+            GridVarData::I32(x) => x.shape(),
+            GridVarData::F64(x) => x.shape(),
+        }
+    }
+}
+
+impl From<Array<i32, IxDyn>> for GridVarData {
+    fn from(value: Array<i32, IxDyn>) -> Self {
+        GridVarData::I32(value)
+    }
+}
+
+impl From<Vec<i32>> for GridVarData {
+    fn from(value: Vec<i32>) -> Self {
+        Array::from_vec(value).into_dyn().into()
+    }
+}
+
+impl From<&[i32]> for GridVarData {
+    fn from(value: &[i32]) -> Self {
+        ArrayView1::from(value).into_owned().into_dyn().into()
+    }
+}
+
+impl From<Array<f64, IxDyn>> for GridVarData {
+    fn from(value: Array<f64, IxDyn>) -> Self {
+        GridVarData::F64(value)
+    }
+}
+
+impl From<Vec<f64>> for GridVarData {
+    fn from(value: Vec<f64>) -> Self {
+        Array::from_vec(value).into_dyn().into()
+    }
+}
+
+impl From<&[f64]> for GridVarData {
+    fn from(value: &[f64]) -> Self {
+        ArrayView1::from(value).into_owned().into_dyn().into()
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct GridVariable {
@@ -9,13 +60,13 @@ pub struct GridVariable {
     pub dimensions: Vec<String>,
     //dimensions: HashMap<String, Dim>,
     //coordinates: HashMap<String, Vec<f64>>,
-    pub data: Array<f64, IxDyn>,
+    pub data: GridVarData,
     pub attr: HashMap<String, String>,
 }
 
 impl GridVariable {
     pub fn new_from_parts(
-        data: Array<f64, IxDyn>,
+        data: impl Into<GridVarData>,
         name: &str,
         dims: &[&str],
         attr: Option<HashMap<String, String>>,
@@ -25,12 +76,17 @@ impl GridVariable {
         for itm in dims {
             dimensions.push(itm.to_string());
         }
+        let data = data.into();
         GridVariable {
             name: name.to_owned(),
             dimensions,
             data,
             attr,
         }
+    }
+
+    pub fn shape(&self) -> &[usize] {
+        self.data.shape()
     }
 }
 
@@ -65,7 +121,7 @@ impl DataSet {
     pub fn all_dimensions(&self) -> Vec<(String, usize)> {
         let mut dims = vec![];
         for v in self.vars.iter() {
-            for (dname, dlen) in v.dimensions.iter().zip(v.data.shape()) {
+            for (dname, dlen) in v.dimensions.iter().zip(v.shape()) {
                 let itm = (dname.to_owned(), *dlen);
                 if !dims.contains(&itm) {
                     dims.push(itm);
@@ -97,12 +153,16 @@ impl DataSet {
         for v in self.vars.iter() {
             let mut var = file
                 .variable_mut(&v.name)
-                .ok_or(anyhow!("Can't find variable"))?;
-            let data = v
-                .data
-                .as_slice()
-                .ok_or(anyhow!("Can't convert array to slice"))?;
-            var.put_values(data, ..)?;
+                .expect("Variable was just created in netCDF file, but now it can't be found");
+
+            match &v.data {
+                GridVarData::I32(x) => {
+                    var.put_values(x.as_slice().expect("Can't convert array to slice."), ..)?
+                }
+                GridVarData::F64(x) => {
+                    var.put_values(x.as_slice().expect("Can't convert array to slice."), ..)?
+                }
+            }
         }
 
         Ok(())
@@ -120,8 +180,8 @@ mod tests {
     use super::*;
 
     fn create_var() -> GridVariable {
-        let data = ArrayD::zeros(vec![10, 20]);
-        let var = GridVariable::new_from_parts(data, "test", &["x", "y"], None);
+        let data = GridVarData::F64(ArrayD::zeros(vec![10, 20]));
+        let var = GridVarData::new_from_parts(data, "test", &["x", "y"], None);
         var
     }
 
