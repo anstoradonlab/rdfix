@@ -55,6 +55,8 @@ pub struct InputRecord {
     pub airt: f64,
     /// Known radon concentration or NaN if missing, Bq/m3
     pub radon_truth: f64,
+    /// Status indicator, `0` is for normal operation
+    pub flag: i32,
 }
 
 impl Default for InputRecord {
@@ -68,6 +70,7 @@ impl Default for InputRecord {
             q_external: 80.0 / 60.0 / 1000.0,
             airt: 21.0,
             radon_truth: f64::NAN,
+            flag: 0,
         }
     }
 }
@@ -86,6 +89,8 @@ struct IoInputRecord {
     pub airt: f64,
     #[serde(default = "IoInputRecord::radon_truth_default")]
     pub radon_truth: f64,
+    #[serde(default)]
+    pub flag: i32,
 }
 
 impl IoInputRecord {
@@ -152,13 +157,13 @@ impl From<IoInputRecord> for InputRecord {
             q_external: itm.q_external,
             airt: itm.airt,
             radon_truth: itm.radon_truth,
+            flag: itm.flag,
         }
     }
 }
 
 impl From<InputRecord> for IoInputRecord {
     fn from(itm: InputRecord) -> Self {
-        // TODO: calculate properly
         let secs = Duration::try_seconds(itm.time.round() as i64).unwrap();
         let nanosecs = Duration::nanoseconds(((itm.time - itm.time.round()) * 1e9) as i64);
         let time: NaiveDateTime = *REFERENCE_TIME + secs + nanosecs;
@@ -171,6 +176,7 @@ impl From<InputRecord> for IoInputRecord {
             q_external: itm.q_external,
             airt: itm.airt,
             radon_truth: itm.radon_truth,
+            flag: itm.flag,
         }
     }
 }
@@ -542,11 +548,11 @@ mod tests {
         let mut outfile = Vec::new();
         write_csv(&mut outfile, ts).unwrap();
         let s = String::from_utf8(outfile.clone()).unwrap();
-        let expected = "time,counts,background_count_rate,sensitivity,q_internal,q_external,airt,radon_truth\n\
-        2000-01-01 00:00:00,1030.0,0.016666666666666666,0.5555555555555556,0.0016666666666666668,0.0013333333333333333,21.0,NaN\n\
-        2000-01-01 00:30:00,1030.0,0.016666666666666666,0.5555555555555556,0.0016666666666666668,0.0013333333333333333,21.0,NaN\n\
-        2000-01-01 01:00:00,1030.0,0.016666666666666666,0.5555555555555556,0.0016666666666666668,0.0013333333333333333,21.0,NaN\n\
-        2000-01-01 01:30:00,1030.0,0.016666666666666666,0.5555555555555556,0.0016666666666666668,0.0013333333333333333,21.0,NaN\n";
+        let expected = "time,counts,background_count_rate,sensitivity,q_internal,q_external,airt,radon_truth,flag\n\
+        2000-01-01 00:00:00,1030.0,0.016666666666666666,0.5555555555555556,0.0016666666666666668,0.0013333333333333333,21.0,NaN,0\n\
+        2000-01-01 00:30:00,1030.0,0.016666666666666666,0.5555555555555556,0.0016666666666666668,0.0013333333333333333,21.0,NaN,0\n\
+        2000-01-01 01:00:00,1030.0,0.016666666666666666,0.5555555555555556,0.0016666666666666668,0.0013333333333333333,21.0,NaN,0\n\
+        2000-01-01 01:30:00,1030.0,0.016666666666666666,0.5555555555555556,0.0016666666666666668,0.0013333333333333333,21.0,NaN,0\n";
         assert_eq!(s, expected);
         dbg!(&s);
         println!("{}", s);

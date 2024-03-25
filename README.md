@@ -126,7 +126,8 @@ Most of these options can be left as their default values, especially for a firs
   - `q_internal`: Internal flow rate, m3/sec
   - `q_external`: External flow rate, m3/sec
   - `airt`: Air temperature, degC
-  - `radon_truth`: Optional, if present it contains the known, instantaneous, "True" radon concentration, Bq/m3.
+  - `radon_truth`: Optional, default value NaN, the known, instantaneous, "True" radon concentration, Bq/m3.
+  - `flag`: Optional, default value 0, data QA/QC flags.  0 implies "good measurement".  A value other than 0 forces the output to be masked out as invalid.
 
 It is possible to make these changes in a spreadsheet, or use Python, R, etc. to write out a csv file.  There is some pre-processing required to work out the background count rate and detector sensitivity.
 

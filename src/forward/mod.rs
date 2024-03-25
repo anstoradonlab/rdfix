@@ -785,7 +785,7 @@ mod tests {
             q_internal: 0.1 / 60.0,           //volumetric, m3/sec
             q_external: 80.0 / 60.0 / 1000.0, //volumetric, m3/sec
             airt: 21.0,                       // degC
-            radon_truth: f64::NAN,
+            ..Default::default()
         };
         const N: usize = 10;
         const DT: f64 = 30.0 * 60.0;
@@ -827,7 +827,7 @@ mod tests {
             q_internal: 0.1 / 60.0,           //volumetric, m3/sec
             q_external: 80.0 / 60.0 / 1000.0, //volumetric, m3/sec
             airt: 21.0,                       // degC
-            radon_truth: f64::NAN,
+            ..Default::default()
         };
         const N: usize = 4;
         const DT: f64 = 30.0 * 60.0;
@@ -868,7 +868,7 @@ mod tests {
             q_internal: 0.1 / 60.0,           //volumetric, m3/sec
             q_external: 80.0 / 60.0 / 1000.0, //volumetric, m3/sec
             airt: 21.0,                       // degC
-            radon_truth: f64::NAN,
+            ..Default::default()
         };
 
         let mut data = InputTimeSeries::new();

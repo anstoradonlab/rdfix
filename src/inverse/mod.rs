@@ -1247,7 +1247,7 @@ mod tests {
             q_internal: 0.1 / 60.0,           //volumetric, m3/sec
             q_external: 80.0 / 60.0 / 1000.0, //volumetric, m3/sec
             airt: 21.0,                       // degC
-            radon_truth: f64::NAN,
+            ..Default::default()
         };
         let mut ts = InputRecordVec::new();
         for _ in 0..npts {
