@@ -145,7 +145,11 @@ impl DataSet {
         for v in self.vars.iter() {
             let dim_names: Vec<&str> = v.dimensions.iter().map(String::as_str).collect();
 
-            let var = &mut file.add_variable::<f64>(&v.name, &dim_names)?;
+            let mut var = match &v.data{
+                GridVarData::I32(_) => file.add_variable::<i32>(&v.name, &dim_names)?,
+                GridVarData::F64(_) => file.add_variable::<f64>(&v.name, &dim_names)?,
+            };
+             
             for (name, val) in v.attr.iter() {
                 var.put_attribute(name.as_str(), val.as_str())?;
             }
@@ -181,7 +185,7 @@ mod tests {
 
     fn create_var() -> GridVariable {
         let data = GridVarData::F64(ArrayD::zeros(vec![10, 20]));
-        let var = GridVarData::new_from_parts(data, "test", &["x", "y"], None);
+        let var = GridVariable::new_from_parts(data, "test", &["x", "y"], None);
         var
     }
 

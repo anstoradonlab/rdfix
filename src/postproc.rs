@@ -13,16 +13,34 @@ fn is_mcmc_variable(v: &netcdf::Variable) -> bool {
         .any(|x| x.name() == "sample" || x.name() == "walker")
 }
 
-// Return true if the variable is one which represents the
-// state of a variable at an instant in time (rather than a
-// time average).
-// TODO: handle this better, it's presently hard-coded
+/// Return true if the variable is one which represents the
+/// state of a variable at an instant in time (rather than a
+/// time average).
+/// TODO: handle this better, it's presently hard-coded
 fn is_instantaneous_variable(v: &netcdf::Variable) -> bool {
     let is_mcmc = is_mcmc_variable(v);
     let has_tdim = !needs_time_dim(v);
     let inst_names = ["map_radon", "model_time", "time"];
     let vname = v.name();
     has_tdim && (is_mcmc || inst_names.into_iter().any(|x| x == vname))
+}
+
+/// Return True if this is the name of a variable which should be masked
+fn is_maskable_varname(vname: &str) -> bool
+{
+    let maskable_names = ["map_radon", "undeconvolved_radon", "radon"];
+    maskable_names.into_iter().any(|x| {
+        variable_suffixes().into_iter().any(|sfx| {
+            vname.strip_suffix(sfx)
+                .map_or_else(|| false, |itm| itm == x)
+        })
+    })
+}
+
+/// Return True for variables which should be masked
+fn is_maskable_variable(v: &netcdf::Variable) -> bool {
+    let vname = v.name();
+    is_maskable_varname(&vname)
 }
 
 fn needs_time_dim(v: &netcdf::Variable) -> bool {
@@ -103,24 +121,37 @@ fn copy_nc_structure(
             vdims.insert(0, "time".to_string());
         }
 
+        let variable_prefixes = if is_maskable_variable(&v) {
+            vec!["unmasked_", ""]
+        } else {
+            vec![""]
+        };
         if is_mcmc_variable(&v) {
             // MCMC variables, on output, are dimensioned by time only
             let vdims_str = vec!["time"];
-            for suffix in variable_suffixes() {
-                let vout_name = format!("{}{}", v.name(), suffix);
-                let mut vout = ncout.add_variable::<f64>(&vout_name, &vdims_str)?;
+            for prefix in variable_prefixes {
+                for suffix in variable_suffixes() {
+                    let vout_name = format!("{}{}{}", prefix, v.name(), suffix);
+                    let typ = v.vartype();
+                    let mut vout = ncout.add_variable_with_type(&vout_name, &vdims_str, &typ)?;
+                    for att in v.attributes() {
+                        let attval = att.value()?;
+                        vout.put_attribute(att.name(), attval)?;
+                    }
+                    // TODO: append information to long_name attribute (e.g. ... 2.5th percentile)
+                }
+            }
+        } else {
+            for prefix in variable_prefixes {
+                let vout_name = format!("{}{}", prefix, v.name());
+                let vdims_str = vdims.iter().map(String::as_str).collect::<Vec<_>>();
+                let typ = v.vartype();
+                let mut vout = ncout.add_variable_with_type(&vout_name, &vdims_str, &typ)?;
+                //let mut vout = ncout.add_variable::<f64>(&vout_name, &vdims_str)?;
                 for att in v.attributes() {
                     let attval = att.value()?;
                     vout.put_attribute(att.name(), attval)?;
                 }
-                // TODO: append information to long_name attribute (e.g. ... 2.5th percentile)
-            }
-        } else {
-            let vdims_str = vdims.iter().map(String::as_str).collect::<Vec<_>>();
-            let mut vout = ncout.add_variable::<f64>(&v.name(), &vdims_str)?;
-            for att in v.attributes() {
-                let attval = att.value()?;
-                vout.put_attribute(att.name(), attval)?;
             }
         }
     }
@@ -232,7 +263,7 @@ fn time_average_instantaneous(x_in: &[f64], tau_in: usize, tau_out: usize) -> Ve
     averaged
 }
 
-/// Similar to above, but the input values, x_in, are assumed to be a time
+/// Similar to `time_average_instantaneous`, but the input values, x_in, are assumed to be a time
 /// average over the period t_in
 fn time_average(x_in: &[f64], tau_in: usize, tau_out: usize) -> Vec<f64> {
     assert_ge!(tau_out, tau_in);
@@ -247,6 +278,59 @@ fn time_average(x_in: &[f64], tau_in: usize, tau_out: usize) -> Vec<f64> {
     averaged.extend(x_in[1..].chunks_exact(chunk_size).map(|x| x.mean()));
 
     averaged
+}
+
+/// Not actaully a time average, this performs a reduction over integer timeseries
+/// which is compatible with the time_average function.  The only field which is
+/// treated in this way is the `flag` column.  The reduction scheme is to take the
+/// max over each time window, because a flag value of 0 means "good data", so taking
+/// the max gives a flag value which has a valid interpretation and avoids treating
+/// a full averaging period as valid data when it contains some non-valid data
+fn time_average_int(x_in: &[i32], tau_in: usize, tau_out: usize) -> Vec<i32> {
+    assert_ge!(tau_out, tau_in);
+    assert_eq!(tau_out % tau_in, 0);
+    let chunk_size = tau_out / tau_in;
+    // pre-allocate extra space because of how this function is used in calling code
+    let mut averaged = Vec::with_capacity(x_in.len());
+    // Skip over the first value so that the output ends up on the same time grid
+    // as the 'instantaneous' variables.  These time-average variables are assumed
+    // to follow the datalogger timestamp convention where the timestamp relates
+    // to the end of the sampling period.
+    averaged.extend(
+        x_in[1..]
+            .chunks_exact(chunk_size)
+            .map(|x| x.iter().max().unwrap()),
+    );
+
+    averaged
+}
+
+/// Return a copy of `a` where a[mask != 0] = NAN
+pub fn masked_array(
+    mut a: ndarray::ArrayD<f64>,
+    mask: &[i32],
+    time_dim: ndarray::Axis,
+) -> ndarray::ArrayD<f64> {
+    let mask_array = ndarray::ArrayView1::from(mask);
+    for mut x in a.lanes_mut(time_dim) {
+        x.zip_mut_with(&mask_array, |xi, mi| {
+            if *mi != 0 {
+                *xi = f64::NAN
+            }
+        })
+    }
+    a
+}
+
+/// Return a copy of `v` where v[mask != 0] = NAN
+pub fn masked_vec(v: &[f64], mask: &[i32]) -> Vec<f64> {
+    let mut v = v.to_vec();
+    v.iter_mut().zip(mask).for_each(|(xi, &mi)| {
+        if mi != 0 {
+            *xi = f64::NAN
+        }
+    });
+    v
 }
 
 pub fn postproc<'a, I, P>(
@@ -308,7 +392,7 @@ where
                     // Acceptable to unwrap, we've already made sure to create this variable
                     let mut vout = ncout.variable_mut(&v.name()).unwrap();
                     let data;
-                    #[allow(clippy::single_range_in_vec_init )]
+                    #[allow(clippy::single_range_in_vec_init)]
                     let extents_out = vec![tidx_out..tidx_out + ntime_out];
 
                     if let Some(tau_out) = avg_duration {
@@ -321,43 +405,70 @@ where
                         let (idx0, idx1) = (num_overlap, ntime_in - num_overlap + 1);
 
                         let extents = calc_time_dim_extents(&v, idx0, idx1);
-                        data = v.get::<f64, _>(extents.clone())?;
-                        let values_avg = if is_instantaneous_variable(&v) {
-                            time_average_instantaneous(data.as_slice().unwrap(), tau_in, tau_out)
+                        if v.name() == "flag" {
+                            // special case - flag is i32
+                            let int_data = v.get::<i32, _>(extents.clone())?;
+                            let values_avg =
+                                time_average_int(int_data.as_slice().unwrap(), tau_in, tau_out);
+                            vout.put_values(values_avg.as_slice(), extents_out.clone())?;
                         } else {
-                            time_average(data.as_slice().unwrap(), tau_in, tau_out)
-                        };
-                        assert_eq!(ntime_out, values_avg.len());
-                        vout.put_values(values_avg.as_slice(), extents_out.clone())?;
+                            data = v.get::<f64, _>(extents.clone())?;
+                            let values_avg = if is_instantaneous_variable(&v) {
+                                time_average_instantaneous(
+                                    data.as_slice().unwrap(),
+                                    tau_in,
+                                    tau_out,
+                                )
+                            } else {
+                                time_average(data.as_slice().unwrap(), tau_in, tau_out)
+                            };
+                            assert_eq!(ntime_out, values_avg.len());
+                            vout.put_values(values_avg.as_slice(), extents_out.clone())?;
 
-                        // prevent further usage
-                        drop(vout);
+                            // prevent further usage
+                            drop(vout);
 
-                        if v.name() == "time" {
-                            // If this was the "time" variable then also write the convenience variables
-                            let interval_mid = ndarray::Array1::from_vec(values_avg);
-                            let interval_end = interval_mid.clone() + ((tau_out as f64) / 2.0);
-                            let interval_start = interval_mid.clone() - ((tau_out as f64) / 2.0);
-                            let mut vout_t0 = ncout.variable_mut("interval_start").unwrap();
-                            vout_t0.put(extents_out.clone(), interval_start.view())?;
-                            let mut vout_tm = ncout.variable_mut("interval_mid").unwrap();
-                            vout_tm.put(extents_out.clone(), interval_mid.view())?;
-                            let mut vout_t1 = ncout.variable_mut("interval_end").unwrap();
-                            vout_t1.put(extents_out.clone(), interval_end.view())?;
+                            if v.name() == "time" {
+                                // If this was the "time" variable then also write the convenience variables
+                                let interval_mid = ndarray::Array1::from_vec(values_avg);
+                                let interval_end = interval_mid.clone() + ((tau_out as f64) / 2.0);
+                                let interval_start =
+                                    interval_mid.clone() - ((tau_out as f64) / 2.0);
+                                let mut vout_t0 = ncout.variable_mut("interval_start").unwrap();
+                                vout_t0.put(extents_out.clone(), interval_start.view())?;
+                                let mut vout_tm = ncout.variable_mut("interval_mid").unwrap();
+                                vout_tm.put(extents_out.clone(), interval_mid.view())?;
+                                let mut vout_t1 = ncout.variable_mut("interval_end").unwrap();
+                                vout_t1.put(extents_out.clone(), interval_end.view())?;
+                            }
                         }
                     } else {
+                        // No time averaging.
                         // construct a slice which covers all except for the overlap points, ie. [num_overlap..(N-num_overlap), .., ..]
                         let (extents, extents_out) =
                             calc_extents(&v, num_overlap, ntime_in, tidx_out);
                         // data
-                        data = v.get::<f64, _>(extents)?;
-                        vout.put(extents_out, data.view())?;
+                        let typ = v.vartype();
+                        match typ {
+                            netcdf::types::VariableType::Basic(netcdf::types::BasicType::Int) => {
+                                let data = v.get::<i32, _>(extents)?;
+                                vout.put(extents_out, data.view())?;
+                            }
+                            netcdf::types::VariableType::Basic(
+                                netcdf::types::BasicType::Double,
+                            ) => {
+                                let data = v.get::<f64, _>(extents)?;
+                                vout.put(extents_out, data.view())?;
+                            }
+                            _ => unimplemented!(),
+                        }
                     }
                 }
             } else if has_time_dim && has_sample_dim {
                 // Calculate percentiles and copy non-overlap points to output
                 if v.name() != "radon" {
-                    error!("Processing a variable ({}) which looks like it comes from MCMC samples and has a 'time' dimension but is not called 'radon'.  Output might be incorrect.", v.name());
+                    error!("Processing a variable ({}) which looks like it comes from MCMC samples and has a 'time' dimension \
+                            but is not called 'radon'.  Output might be incorrect.", v.name());
                 }
                 if let Some(idx_time_dim) = dims.iter().position(|itm| itm.name() == "time") {
                     let data = if let Some(tau_out) = avg_duration {
@@ -407,7 +518,7 @@ where
 
                     let n_points = var_mean.len();
                     assert_eq!(n_points, ntime_out);
-                    #[allow(clippy::single_range_in_vec_init )]
+                    #[allow(clippy::single_range_in_vec_init)]
                     let extents_out = vec![tidx_out..tidx_out + ntime_out];
                     ncout
                         .variable_mut(&v.name())
@@ -436,7 +547,7 @@ where
                 let data = v.get::<f64, _>(..)?;
                 let var_mean = data.clone().mean();
                 let values = vec![var_mean; ntime_out];
-                #[allow(clippy::single_range_in_vec_init )]
+                #[allow(clippy::single_range_in_vec_init)]
                 let extents_out = vec![tidx_out..tidx_out + ntime_out];
                 ncout
                     .variable_mut(&v.name())
@@ -455,15 +566,14 @@ where
                 // This is a variable without dimenions.  It is expanded along the time
                 // dimension.
                 // Note: name this variable so that type inference works
-                let empty_slice: &[usize;0] = &[];
+                let empty_slice: &[usize; 0] = &[];
                 let data = v.get_value::<f64, _>(empty_slice)?;
                 let values = vec![data; ntime_out];
-                let vout_name =v.name();
+                let vout_name = v.name();
                 let mut vout = ncout.variable_mut(&vout_name).unwrap();
-                #[allow(clippy::single_range_in_vec_init )]
+                #[allow(clippy::single_range_in_vec_init)]
                 let extents_out = vec![tidx_out..tidx_out + ntime_out];
                 vout.put_values(&values, extents_out.clone())?;
-
             } else if !has_time_dim && !has_sample_dim {
                 // This might be a coordinate variable, currently not expected
                 // and perhaps should be handled, only once, in the "copy structure"
@@ -475,5 +585,57 @@ where
         tidx_out += ntime_out;
     }
 
+    // Second pass over the output file, add the masked/unmasked versions of variables
+
+    // Flag variable - zero means "Ok", other values should be masked
+    // expect: we just created this file, so it really should have this structure
+    let flag = ncout
+        .variable("flag")
+        .expect("flag variable missing from nc file")
+        .get_values::<i32, _>(..)
+        .expect("Error reading flag");
+
+    let vnames: Vec<_> = ncout
+        .variables()
+        .into_iter()
+        .filter(|v| is_maskable_variable(&v))
+        .map(|v| v.name())
+        .collect();
+    for vname in vnames {
+        let mut v = ncout.variable_mut(vname.as_str()).unwrap();
+        let idx_time_dim = v
+            .dimensions()
+            .iter()
+            .position(|itm| itm.name() == "time")
+            .unwrap();
+        let data = v.get::<f64, _>(..)?;
+        let data_masked = masked_array(data.clone(), &flag, ndarray::Axis(idx_time_dim));
+        v.put(.., data_masked.view())?;
+        let vname_unmasked = format!("unmasked_{}", vname);
+        // info!("Processing: {} and {}",&vname, &vname_unmasked);
+        let mut v = ncout.variable_mut(vname_unmasked.as_str()).unwrap();
+        v.put(.., data.view())?;
+    }
+
     Ok(())
+}
+
+
+
+#[cfg(test)]
+mod tests{
+    use super::*;
+
+    #[test]
+    fn identify_maskable_variable(){
+        assert_eq!(is_maskable_varname("map_radon"), true);
+        assert_eq!(is_maskable_varname("map_radon_q840"), true);
+        assert_eq!(is_maskable_varname("radon"), true);
+        assert_eq!(is_maskable_varname("radon_q025"), true);
+        assert_eq!(is_maskable_varname("undeconvolved_radon"), true);
+
+        assert_eq!(is_maskable_varname("radon_b"), false);
+        assert_eq!(is_maskable_varname("x"), false);
+        assert_eq!(is_maskable_varname("unmasked_radon"), false);
+    }
 }

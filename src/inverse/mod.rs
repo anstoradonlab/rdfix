@@ -525,8 +525,6 @@ impl DetectorInverseModel {
         });
         //let autocorr_mean = autocorr.mean_axis(Axis(1)).expect("Axis length was zero");
 
-        dbg!(&autocorr_mean);
-
         let n_effective = (num_samples_thin as f64) / autocorr_mean;
         let r_screen_scale_neff = n_effective.slice(s![0]);
         let exflow_scale_neff = n_effective.slice(s![1]);
@@ -606,6 +604,26 @@ impl DetectorInverseModel {
                 &[],
                 None,
             ),
+            GridVariable::new_from_parts(
+                r_screen_scale_neff.into_dyn().into_owned(),
+                "r_screen_effective_samples_per_walker",
+                &[],
+                None,
+            ),
+            GridVariable::new_from_parts(
+                exflow_scale_neff.into_dyn().into_owned(),
+                "exflow_effective_samples_per_walker",
+                &[],
+                None,
+            ),
+            GridVariable::new_from_parts(
+                radon_neff.into_dyn().into_owned(),
+                "radon_effective_samples_per_walker",
+                &["time"],
+                None,
+            ),
+
+
         ];
 
         Ok(data)

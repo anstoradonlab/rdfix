@@ -186,7 +186,7 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
         })
         .collect();
 
-        let processed_fnames = results_and_errors
+    let processed_fnames = results_and_errors
         .iter()
         .filter(|itm| itm.is_ok())
         .map(|itm| itm.as_ref().unwrap())
