@@ -488,7 +488,7 @@ impl DetectorInverseModel {
 
         // per-walker autocorrelation
         println!("shape: {}, {}", chain.len(), chain[0].len());
-        println!("organising chains");
+        //println!("organising chains");
 
         let num_samples_thin = num::integer::div_ceil(num_samples, thin);
         let mut samples = Array3::<f64>::zeros((dim, num_walkers, num_samples_thin));
@@ -502,20 +502,36 @@ impl DetectorInverseModel {
         }
 
         println!("Calculating autocorr");
-        let samples_slice = samples.slice(s![.., 0..3, ..]);
-        let _autocorr = samples_slice.map_axis(Axis(2), |x| {
-            let y = auto_corr_time::<_>(x.iter().cloned(), None, Some(10));
-            y
-            // match y{
-            //     Some(z) => z,
-            //     None => {
-            //         panic!("None value when Some was expected");}
-            // }
+        let autocorr = samples.map_axis(Axis(2), |x| {
+            let y = auto_corr_time::<_>(x.iter().cloned(), None, Some(1));
+            y.unwrap_or(f64::NAN)
         });
 
-        //let autocorr_mean = autocorr.mean_axis(Axis(0));
+        let autocorr_mean = autocorr.map_axis(Axis(1), |row| {
+            // Calculate mean, skipping over NaN values
+            let n: f64 = row
+                .iter()
+                .map(|x| if !x.is_finite() { 0.0 } else { 1.0 })
+                .sum();
+            let sum: f64 = row
+                .iter()
+                .map(|x| if !x.is_finite() { 0.0 } else { *x })
+                .sum();
+            if n == 0.0 {
+                f64::NAN
+            } else {
+                sum / n
+            }
+        });
+        //let autocorr_mean = autocorr.mean_axis(Axis(1)).expect("Axis length was zero");
 
-        //dbg!(&autocorr_mean);
+        dbg!(&autocorr_mean);
+
+        let n_effective = (num_samples_thin as f64) / autocorr_mean;
+        let r_screen_scale_neff = n_effective.slice(s![0]);
+        let exflow_scale_neff = n_effective.slice(s![1]);
+        let radon_neff = n_effective.slice(s![2..]);
+
 
         // 100 iterations of 10 walkers as burn-in
         //let chain = &chain[num_walkers * num_burn_in_samples..];
@@ -584,6 +600,12 @@ impl DetectorInverseModel {
             r_screen_scale_samples,
             exflow_scale_samples,
             radon_samples,
+            GridVariable::new_from_parts(
+                vec![acc_frac],
+                "sampler_acceptance_fraction",
+                &[],
+                None,
+            ),
         ];
 
         Ok(data)

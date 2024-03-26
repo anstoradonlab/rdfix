@@ -451,6 +451,19 @@ where
                     let mut vout = ncout.variable_mut(&vout_name).unwrap();
                     vout.put_values(&values, extents_out.clone())?;
                 }
+            } else if dims.len() == 0 {
+                // This is a variable without dimenions.  It is expanded along the time
+                // dimension.
+                // Note: name this variable so that type inference works
+                let empty_slice: &[usize;0] = &[];
+                let data = v.get_value::<f64, _>(empty_slice)?;
+                let values = vec![data; ntime_out];
+                let vout_name =v.name();
+                let mut vout = ncout.variable_mut(&vout_name).unwrap();
+                #[allow(clippy::single_range_in_vec_init )]
+                let extents_out = vec![tidx_out..tidx_out + ntime_out];
+                vout.put_values(&values, extents_out.clone())?;
+
             } else if !has_time_dim && !has_sample_dim {
                 // This might be a coordinate variable, currently not expected
                 // and perhaps should be handled, only once, in the "copy structure"
