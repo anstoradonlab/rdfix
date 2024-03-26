@@ -121,13 +121,24 @@ Most of these options can be left as their default values, especially for a firs
 
   - `time`: Timestamp (at the end of interval) in YYYY-mm-dd HH:MM:SS format.  Presently, this must be 30-minute intervals without gaps.  If you're running 
   - `counts`: Net counts over the period (t-deltaT, t).  Missing values are allowed, indicated with `NaN`
-  - `background_count_rate`: Background count rate, counts/sec
+  - `background_count_rate`: Background count rate, counts/sec. If provided in counts/30-minute, then divide by 1800 (seconds/half-hour).
   - `sensitivity`: Detector calibration coefficient, (counts/sec)/(Bq/m3)
-  - `q_internal`: Internal flow rate, m3/sec
-  - `q_external`: External flow rate, m3/sec
+  - `q_internal`: Internal flow rate, m3/sec.  If provided as flow rate, m/s, then convert to volumetric flow by multiplying by pipe area, $A=\pi r^2$, where the pipe radius, $r$, is 50mm.
+  - `q_external`: External flow rate, m3/sec.  If provided in l/min then convert to m3/sec by dividing by (1000*60).
   - `airt`: Air temperature, degC
   - `radon_truth`: Optional, default value NaN, the known, instantaneous, "True" radon concentration, Bq/m3.
   - `flag`: Optional, default value 0, data QA/QC flags.  0 implies "good measurement".  A value other than 0 forces the output to be masked out as invalid.
+
+Typically, something like this Python code will be needed:
+
+```python
+df["background_count_rate"] = df['bg'] / (60*30)
+df["q_external"] = df.exflow / 1000 / 60.0
+# internal flow, convert from velocity (m/sec) to volumetric flow rate m3/sec
+# the inflow parameter is in units of m/sec, pipe diameter is 100mm
+pipe_area = np.pi * (100 / 1000 / 2.0) ** 2
+df["q_internal"] = df.inflow * pipe_area
+```
 
 It is possible to make these changes in a spreadsheet, or use Python, R, etc. to write out a csv file.  There is some pre-processing required to work out the background count rate and detector sensitivity.
 
