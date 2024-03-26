@@ -484,12 +484,8 @@ impl DetectorInverseModel {
 
         let sampled = num_walkers * num_samples;
         let acc_frac = accepted as f64 / sampled as f64;
-        println!("sampled: {sampled}, accepted: {accepted}, fraction = {acc_frac}");
 
         // per-walker autocorrelation
-        println!("shape: {}, {}", chain.len(), chain[0].len());
-        //println!("organising chains");
-
         let num_samples_thin = num::integer::div_ceil(num_samples, thin);
         let mut samples = Array3::<f64>::zeros((dim, num_walkers, num_samples_thin));
         for ii in (0..num_samples).step_by(thin) {
@@ -501,7 +497,6 @@ impl DetectorInverseModel {
             }
         }
 
-        println!("Calculating autocorr");
         let autocorr = samples.map_axis(Axis(2), |x| {
             let y = auto_corr_time::<_>(x.iter().cloned(), None, Some(1));
             y.unwrap_or(f64::NAN)
@@ -536,9 +531,11 @@ impl DetectorInverseModel {
 
         //chain.iter().map(|&[p]| p).sum::<f64>() / chain.len() as f64;
 
-        let r_screen_scale_samples = samples.slice(s![0, .., ..]);
-        let exflow_scale_samples = samples.slice(s![1, .., ..]);
+        let r_screen_scale_samples = samples.slice(s![0, .., ..]).map(|x| x.exp());
+        let exflow_scale_samples = samples.slice(s![1, .., ..]).map(|x| x.exp());
         let transformed_radon_samples = samples.slice(s![2.., .., ..]);
+
+
 
         // inverse transform
 
