@@ -6,7 +6,7 @@ edition = "2021"
 repository = "https://github.com/anstoradonlab/rdfix"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 
 [workspace.dependencies]
 num-traits = "0.2"
@@ -104,7 +104,7 @@ lto = "thin"
 #lto = "fat"
 
 [[bin]]
-name="rdfix-deconvolve"
+name="rdfix"
 path="src/main.rs"
 bench = false
 

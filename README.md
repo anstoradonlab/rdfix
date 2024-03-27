@@ -11,7 +11,7 @@ An option for using a No U-Turn Sampler, [NUTS](https://docs.rs/nuts-rs/latest/n
 
 ## Installation
 
-**Note:** `rdfix-deconvolve` binaries are built for Linux and Windows, but compiling for Mac should be straightforward.
+**Note:** `rdfix` binaries are built for Linux and Windows, but compiling for Mac should be straightforward.
 
 ### From binary
 
@@ -19,7 +19,7 @@ This is the easy option, if you just want to run the program.  Download a binary
 
 ### From source
 
-Rust is required for compiling `rdfix-deconvolve` from source.  
+Rust is required for compiling `rdfix` from source.  
 
 First, [install rust](https://www.rust-lang.org/tools/install).  Then, execute
 
@@ -27,7 +27,7 @@ First, [install rust](https://www.rust-lang.org/tools/install).  Then, execute
 cargo install --locked --git https://github.com/anstoradonlab/rdfix.git
 ```
 
-to download the clone the repository, compile the `rdfix-deconvolve` binary, and copy to a place in your `$PATH`.  To do these three steps manually:
+to download the clone the repository, compile the `rdfix` binary, and copy to a place in your `$PATH`.  To do these three steps manually:
 
  clone the repository, 
 
@@ -41,7 +41,7 @@ finally compile using cargo
 cargo build --release
 ```
 
-then copy the binary from `target/release/rdfix-deconvolve` to a place in your `$PATH`.
+then copy the binary from `target/release/rdfix` to a place in your `$PATH`.
 
 
 
@@ -52,7 +52,7 @@ then copy the binary from `target/release/rdfix-deconvolve` to a place in your `
 This command configures a run directory with simulated output from a radon detector in a subdirectory called `test`.
 
 ```bash
-rdfix-deconvolve template -t test cal-peak-one-day
+rdfix template -t test cal-peak-one-day
 ```
 
 ### 2 Run the test case
@@ -60,7 +60,7 @@ rdfix-deconvolve template -t test cal-peak-one-day
 The command for running deconvolution will be printed in the terminal window.  It is:
 
 ```bash
-rdfix-deconvolve deconv --config test/config.toml --output test/deconv-output test/raw-data.csv
+rdfix deconv --config test/config.toml --output test/deconv-output test/raw-data.csv
 ```
 
 The sampling stage of deconvolution runs in parallel and uses all available CPU cores.  It's computationally expensive, taking about three minutes to execute on my 4-core laptop.
@@ -70,7 +70,7 @@ The sampling stage of deconvolution runs in parallel and uses all available CPU 
 Create another template.  If you have a month or more of data, use the `cal-peak-month` template, for example
 
 ```bash
-rdfix-deconvolve template -t real_data cal-peak-month
+rdfix template -t real_data cal-peak-month
 ```
 ### 4 Edit the configuration file
 
@@ -145,7 +145,7 @@ It is possible to make these changes in a spreadsheet, or use Python, R, etc. to
 ### 6 Run deconvolution
 
 ```bash
-rdfix-deconvolve deconv --config real_data/config.toml --output real_data/deconv-output real_data/raw-data.csv
+rdfix deconv --config real_data/config.toml --output real_data/deconv-output real_data/raw-data.csv
 ```
 
 ### 7 View output

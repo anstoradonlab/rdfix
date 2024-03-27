@@ -90,7 +90,7 @@ fn create_template(cmd_args: &TemplateArgs) -> Result<()> {
 
     let output_dir = cmd_args.template_dir.clone().join("deconv-output");
     fs::create_dir_all(&output_dir)?;
-    println!("Template created.  Perform a test by running:\n> rdfix-deconvolve deconv --config {} --output {} {}", config_fname.display(), output_dir.display(), fname.display());
+    println!("Template created.  Perform a test by running:\n> rdfix deconv --config {} --output {} {}", config_fname.display(), output_dir.display(), fname.display());
 
     Ok(())
 }
@@ -257,7 +257,7 @@ mod tests {
         let dir_output = tempdir().unwrap();
 
         let cmdline = vec![
-            "rdfix-deconvolve",
+            "rdfix",
             "template",
             "-t",
             dir_input.path().to_str().unwrap(),
@@ -270,7 +270,7 @@ mod tests {
         let config_fname = dir_input.path().join("config.toml");
         let input_fname = dir_input.path().join("raw-data.csv");
         let cmdline = vec![
-            "rdfix-deconvolve",
+            "rdfix",
             "deconv",
             "-c",
             config_fname.to_str().unwrap(),

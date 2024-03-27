@@ -1530,7 +1530,7 @@ dependencies = [
 
 [[package]]
 name = "rdfix"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "approx 0.5.1",
@@ -1573,7 +1573,7 @@ dependencies = [
 
 [[package]]
 name = "rdfix_gf"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "num-traits",
 ]
