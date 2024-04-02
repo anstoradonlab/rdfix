@@ -120,7 +120,7 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
             config.inversion.overlapsize,
         )?);
     } else {
-        chunks.push(ts);
+        chunks.push(ts.clone());
     }
 
     let nchunks = chunks.len();
@@ -144,14 +144,16 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
             let panic_wrapper = std::panic::catch_unwind(|| {
                 fit_inverse_model(p.clone(), inv_opts, ts_chunk.clone())
             });
-            let fit_result = if panic_wrapper.is_ok() {
-                panic_wrapper.unwrap()
-            } else {
-                // Panic occurred.  The panic message still gets printed out, so convert the error into
-                // something we can use later and continue.
-                let e = panic_wrapper.unwrap_err();
-                Err(anyhow!("{:?}", e.downcast_ref::<&str>()))
-            };
+            //let fit_result = if panic_wrapper.is_ok() {
+            //    panic_wrapper.unwrap()
+            //} else {
+            //    // Panic occurred.  The panic message still gets printed out, so convert the error into
+            //    // something we can use later and continue.
+            //    let e = panic_wrapper.unwrap_err();
+            //    Err(anyhow!("{:?}", e.downcast_ref::<&str>()))
+            //};
+            let fit_result = panic_wrapper.unwrap_or_else(|e| 
+                Err(anyhow!("{:?}", e.downcast_ref::<&str>())));
             match fit_result {
                 Err(e) => {
                     let chunk_id = ts_chunk.chunk_id();
@@ -200,6 +202,7 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
 
     let output_fname = cmd_args.output.join("summary.nc");
     let _pproc = postproc(
+        &ts,
         processed_fnames.clone(),
         config.inversion.overlapsize,
         output_fname,
@@ -208,6 +211,7 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
 
     let output_fname = cmd_args.output.join("summary_30min_average.nc");
     let _pproc = postproc(
+        &ts,
         processed_fnames.clone(),
         config.inversion.overlapsize,
         output_fname,
@@ -216,6 +220,7 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
 
     let output_fname = cmd_args.output.join("summary_60min_average.nc");
     let _pproc = postproc(
+        &ts,
         processed_fnames.clone(),
         config.inversion.overlapsize,
         output_fname,

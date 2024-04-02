@@ -7,6 +7,8 @@ use statrs::statistics::OrderStatistics;
 use statrs::statistics::Statistics;
 use std::path::PathBuf;
 
+use crate::InputTimeSeries;
+
 fn is_mcmc_variable(v: &netcdf::Variable) -> bool {
     v.dimensions()
         .iter()
@@ -26,12 +28,12 @@ fn is_instantaneous_variable(v: &netcdf::Variable) -> bool {
 }
 
 /// Return True if this is the name of a variable which should be masked
-fn is_maskable_varname(vname: &str) -> bool
-{
+fn is_maskable_varname(vname: &str) -> bool {
     let maskable_names = ["map_radon", "undeconvolved_radon", "radon"];
     maskable_names.into_iter().any(|x| {
         variable_suffixes().into_iter().any(|sfx| {
-            vname.strip_suffix(sfx)
+            vname
+                .strip_suffix(sfx)
                 .map_or_else(|| false, |itm| itm == x)
         })
     })
@@ -333,7 +335,85 @@ pub fn masked_vec(v: &[f64], mask: &[i32]) -> Vec<f64> {
     v
 }
 
+pub fn calc_tau_in(ts: &InputTimeSeries) -> usize{
+    (ts.time[1] - ts.time[0]).round() as usize
+}
+
+// TODO: change this so that the output indices are calculated ahead of time (instead of file-by-file)
+// The steps will be
+//    - load the time dimension from the first and last file
+//    - apply the averaging function
+//    - extract t0 from the first file and t[end] from the last file (or, rather, from the input ts ..?)
+//    - generate the time dimension, and the other aux. time variables, and write all
+//    - use this information to generate a mapping from time t to index ii,
+//         ii = (t-t0) / Delta_t
+
+struct TimeInfo{
+    /// The time *at* the start of the analysis period, seconds since a reference time
+    t_start: f64,
+    /// The timestep, in seconds
+    delta_t: f64,
+    /// Total number of time points
+    ntime: usize,
+}
+
+impl TimeInfo{
+    pub fn new_from_info(ts: &InputTimeSeries, num_overlap:usize, avg_duration: Option<usize>) -> Self{
+        let tau_in = calc_tau_in(ts);
+        // -1 here because the timestamp convention on the input 
+        // is that t is the time at the end of the interval
+        let (delta_t, idx0) = if let Some(avg) = avg_duration{
+           (avg as f64, num_overlap)
+        } else{
+            (tau_in as f64, num_overlap - 1)
+        };
+        let t_start = ts.time[idx0];
+        let ntime_in = ts.len();
+        let ntime_out = if let Some(avg) = avg_duration {
+            (ntime_in - num_overlap - num_overlap) / (avg / tau_in)
+        } else {
+            ntime_in - num_overlap - num_overlap
+        };
+
+        TimeInfo{t_start, delta_t, ntime: ntime_out}
+    }
+    /// Calculate index from time at start of interval
+    pub fn idx(&self, interval_start: f64) -> usize{
+        assert_ge!(interval_start, self.t_start);
+        let idx = ((interval_start - self.t_start) / self.delta_t).round() as usize;
+        dbg!(&idx, &interval_start, &self.t_start, &self.delta_t);
+        assert_le!(idx, self.ntime);
+        idx
+    }
+
+    pub fn idx_interval_end(&self, interval_end: f64) -> usize{
+        let interval_start = interval_end - self.delta_t;
+        self.idx(interval_start)
+    }
+
+    pub fn interval_start(&self) -> ndarray::Array1<f64> {
+        ndarray::Array::range(self.t_start, 
+            self.t_start + self.delta_t*(self.ntime as f64 + 0.5),
+            self.delta_t)
+    }
+
+    pub fn interval_mid(&self) -> ndarray::Array1<f64> {
+        ndarray::Array::range(self.t_start + (self.delta_t as f64) / 2.0, 
+            self.t_start + self.delta_t*(self.ntime as f64 + 1.0),
+            self.delta_t)
+    }
+
+    pub fn interval_end(&self) -> ndarray::Array1<f64> {
+        ndarray::Array::range(self.t_start + (self.delta_t as f64), 
+            self.t_start + self.delta_t*(self.ntime as f64 + 1.5),
+            self.delta_t)
+    }
+
+
+}
+
 pub fn postproc<'a, I, P>(
+    ts: &InputTimeSeries,
     filenames: I,
     num_overlap: usize,
     output_fname: P,
@@ -357,6 +437,8 @@ where
 
     let mut tidx_out: usize = 0;
 
+    let tinfo = TimeInfo::new_from_info(ts, num_overlap, avg_duration);
+
     //TODO: replace with iteration
     for f in filenames {
         if let Some(tau_out) = avg_duration {
@@ -368,16 +450,55 @@ where
 
         if first_file {
             copy_nc_structure(&nc, &mut ncout, avg_duration.is_some())?;
+            // pre-write time variables, we write more if averaging is enabled
+            if avg_duration.is_some(){
+                let mut vout = ncout.variable_mut("interval_start").unwrap();
+                vout.put(.., tinfo.interval_start().view())?;
+                let mut vout = ncout.variable_mut("interval_mid").unwrap();
+                vout.put(.., tinfo.interval_mid().view())?;
+                let mut vout = ncout.variable_mut("time").unwrap();
+                vout.put(.., tinfo.interval_mid().view())?;
+                let mut vout = ncout.variable_mut("interval_end").unwrap();
+                vout.put(.., tinfo.interval_end().view())?;
+            }
+            else{
+                let mut vout = ncout.variable_mut("time").unwrap();
+                vout.put(.., tinfo.interval_end().view())?;
+            }
+
             first_file = false;
         } else {
             // TODO: on second file, and etc., validate structure
         }
 
         let ntime_in = nc.dimension("time").unwrap().len();
-        let ntime_out = if avg_duration.is_some() {
-            (ntime_in - num_overlap - num_overlap) / (avg_duration.unwrap() / tau_in)
+        let ntime_out = if let Some(avg) = avg_duration {
+            (ntime_in - num_overlap - num_overlap) / (avg / tau_in)
         } else {
             ntime_in - num_overlap - num_overlap
+        };
+
+        // Calculate the starting index for output.  This contains unnecessary repetition
+        // which should be refactored.
+        let v = nc.variable("time").expect("No time variable");
+        let tidx_out_expected = if let Some(tau_out) = avg_duration {
+            let (idx0, idx1) = (num_overlap, ntime_in - num_overlap + 1);
+            let extents = calc_time_dim_extents(&v, idx0, idx1);
+
+            let data = v.get::<f64, _>(extents.clone())?;
+            assert!(is_instantaneous_variable(&v));
+            let interval_mid = ndarray::Array1::from(
+                time_average_instantaneous(
+                    data.as_slice().unwrap(),
+                    tau_in,
+                    tau_out,
+                ));
+            tinfo.idx(interval_mid[0]- ((tau_out as f64) / 2.0))
+        } else {
+            let (extents, _extents_out) =
+            calc_extents(&v, num_overlap, ntime_in, 0);
+            let data = v.get::<f64, _>(extents)?;
+            tinfo.idx_interval_end(data[0])
         };
 
         for v in nc.variables() {
@@ -434,7 +555,10 @@ where
                                 let interval_end = interval_mid.clone() + ((tau_out as f64) / 2.0);
                                 let interval_start =
                                     interval_mid.clone() - ((tau_out as f64) / 2.0);
+                                //tidx_out_expected = tinfo.idx(interval_start[0]);
                                 let mut vout_t0 = ncout.variable_mut("interval_start").unwrap();
+                                // this should have been written already.  Check for the expected value.
+                                assert_eq!(vout_t0.get_value::<f64, _>([tidx_out_expected]).unwrap(), interval_start[0]);
                                 vout_t0.put(extents_out.clone(), interval_start.view())?;
                                 let mut vout_tm = ncout.variable_mut("interval_mid").unwrap();
                                 vout_tm.put(extents_out.clone(), interval_mid.view())?;
@@ -458,6 +582,9 @@ where
                                 netcdf::types::BasicType::Double,
                             ) => {
                                 let data = v.get::<f64, _>(extents)?;
+                                //if v.name() == "time"{
+                                //    tidx_out_expected = tinfo.idx_interval_end(data[0]);
+                                //}
                                 vout.put(extents_out, data.view())?;
                             }
                             _ => unimplemented!(),
@@ -562,7 +689,7 @@ where
                     let mut vout = ncout.variable_mut(&vout_name).unwrap();
                     vout.put_values(&values, extents_out.clone())?;
                 }
-            } else if dims.len() == 0 {
+            } else if dims.is_empty() {
                 // This is a variable without dimenions.  It is expanded along the time
                 // dimension.
                 // Note: name this variable so that type inference works
@@ -582,6 +709,8 @@ where
             }
         }
 
+        assert_eq!(tidx_out , tidx_out_expected);
+
         tidx_out += ntime_out;
     }
 
@@ -589,16 +718,19 @@ where
 
     // Flag variable - zero means "Ok", other values should be masked
     // expect: we just created this file, so it really should have this structure
-    let flag = ncout
-        .variable("flag")
-        .expect("flag variable missing from nc file")
-        .get_values::<i32, _>(..)
-        .expect("Error reading flag");
+    let flag_var = ncout.variable("flag");
+
+    let flag = match flag_var {
+        Some(var) => var.get_values::<i32, _>(..).expect("Error reading flag"),
+        None => {
+            error!("'flag' variable missing, flagging all data as 0 (Valid)");
+            vec![0; tidx_out]
+        }
+    };
 
     let vnames: Vec<_> = ncout
         .variables()
-        .into_iter()
-        .filter(|v| is_maskable_variable(&v))
+        .filter(|v| is_maskable_variable(v))
         .map(|v| v.name())
         .collect();
     for vname in vnames {
@@ -620,14 +752,12 @@ where
     Ok(())
 }
 
-
-
 #[cfg(test)]
-mod tests{
+mod tests {
     use super::*;
 
     #[test]
-    fn identify_maskable_variable(){
+    fn identify_maskable_variable() {
         assert_eq!(is_maskable_varname("map_radon"), true);
         assert_eq!(is_maskable_varname("map_radon_q840"), true);
         assert_eq!(is_maskable_varname("radon"), true);

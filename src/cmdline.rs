@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::{fs, path::PathBuf};
 
-/// Deconvolve two-filter dual-flow-loop radon detector output
+/// Radon Data Fixer.  Deconvolve dual-flow-loop two-filter radon detector output
 /// using the method from https://doi.org/10.5194/amt-9-2689-2016
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]

@@ -145,11 +145,19 @@ impl DataSet {
         for v in self.vars.iter() {
             let dim_names: Vec<&str> = v.dimensions.iter().map(String::as_str).collect();
 
-            let mut var = match &v.data{
-                GridVarData::I32(_) => file.add_variable::<i32>(&v.name, &dim_names)?,
-                GridVarData::F64(_) => file.add_variable::<f64>(&v.name, &dim_names)?,
+            let mut var = match &v.data {
+                GridVarData::I32(_) => {
+                    let mut var = file.add_variable::<i32>(&v.name, &dim_names)?;
+                    var.set_fill_value(9999)?;
+                    var
+                }
+                GridVarData::F64(_) => {
+                    let mut var = file.add_variable::<f64>(&v.name, &dim_names)?;
+                    var.set_fill_value(f64::NAN)?;
+                    var
+                }
             };
-             
+
             for (name, val) in v.attr.iter() {
                 var.put_attribute(name.as_str(), val.as_str())?;
             }

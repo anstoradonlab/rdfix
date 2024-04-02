@@ -2,10 +2,10 @@
 
 Perform a response time correction on two-filter dual-flow-loop radon detector output using the method from https://doi.org/10.5194/amt-9-2689-2016
 
-This is a re-write of [a Python-based code](https://github.com/agriff86/rd-deconvolve) into rust and it's (hopefully) a much nicer to install and use.  It's my first attempt at using rust, so the code iteself is pretty
+This is a re-write of [a Python-based code](https://github.com/agriff86/rd-deconvolve) into rust and it's (hopefully) a much nicer to install and use.  It's my first attempt at using rust, so the code itself is pretty
 horrible.
 
-Currently the algorithm uses an MCMC sampler based on [hammer_and_sample](https://docs.rs/hammer-and-sample/latest/hammer_and_sample/) which itself is based on [EMCEE](https://emcee.readthedocs.io/en/stable/), the sampler used in the Python version of this code.
+Currently, the algorithm uses an MCMC sampler based on [hammer_and_sample](https://docs.rs/hammer-and-sample/latest/hammer_and_sample/) which itself is based on [EMCEE](https://emcee.readthedocs.io/en/stable/), the sampler used in the Python version of this code.
 
 An option for using a No U-Turn Sampler, [NUTS](https://docs.rs/nuts-rs/latest/nuts_rs/), is in development but will probably rely on [Enzyme](https://enzyme.mit.edu/) for auto-differentiation.
 
