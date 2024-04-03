@@ -8,7 +8,7 @@ use rayon::prelude::*;
 
 use crate::appconfig::AppConfigBuilder;
 use crate::inverse::fit_inverse_model;
-use crate::postproc::postproc;
+use crate::postproc::{netcdf_to_csv, postproc};
 use crate::{cmdline::*, read_csv, TestTimeseries, TimeExtents, TimeseriesKind};
 use crate::{get_test_timeseries, write_csv};
 
@@ -201,31 +201,41 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
         .collect::<Vec<_>>();
 
     let output_fname = cmd_args.output.join("summary.nc");
+    let output_csv_fname = cmd_args.output.join("summary.csv");
     let _pproc = postproc(
         &ts,
         processed_fnames.clone(),
         config.inversion.overlapsize,
-        output_fname,
+        &output_fname,
         None,
     );
+    netcdf_to_csv(&output_fname, &output_csv_fname)?;
 
     let output_fname = cmd_args.output.join("summary_30min_average.nc");
+    let output_csv_fname = cmd_args.output.join("summary_30min_average.csv");
+
     let _pproc = postproc(
         &ts,
         processed_fnames.clone(),
         config.inversion.overlapsize,
-        output_fname,
+        &output_fname,
         Some(30 * 60),
     );
+    netcdf_to_csv(&output_fname, &output_csv_fname)?;
+
 
     let output_fname = cmd_args.output.join("summary_60min_average.nc");
+    let output_csv_fname = cmd_args.output.join("summary_60min_average.csv");
+
     let _pproc = postproc(
         &ts,
         processed_fnames.clone(),
         config.inversion.overlapsize,
-        output_fname,
+        &output_fname,
         Some(60 * 60),
     );
+    netcdf_to_csv(&output_fname, &output_csv_fname)?;
+
 
     Ok(())
 }

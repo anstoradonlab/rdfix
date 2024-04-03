@@ -1,4 +1,5 @@
 use anyhow::Result;
+use chrono::NaiveDateTime;
 use claim::*;
 use log::{error, info};
 use netcdf;
@@ -7,6 +8,7 @@ use statrs::statistics::OrderStatistics;
 use statrs::statistics::Statistics;
 use std::path::PathBuf;
 
+use crate::forward::constants::REFERENCE_TIME;
 use crate::InputTimeSeries;
 
 fn is_mcmc_variable(v: &netcdf::Variable) -> bool {
@@ -744,6 +746,63 @@ where
 
     Ok(())
 }
+
+
+fn ncdate_to_date(ncdate: f64) -> NaiveDateTime{
+    let t: NaiveDateTime = *REFERENCE_TIME;
+    t + chrono::TimeDelta::try_seconds(ncdate.round() as i64).unwrap()
+
+}
+
+pub fn netcdf_to_csv<P1,P2>(netcdf_fname: P1,csv_fname: P2) -> Result<()>
+where P1: AsRef<std::path::Path>,
+P2: AsRef<std::path::Path>,
+{
+    let nc = netcdf::open(netcdf_fname)?;
+    let ntime = nc.dimension("time").expect("NetCDF needs time dimensions").len();
+
+    let mut wtr = csv::Writer::from_path(csv_fname)?;
+    let names: Vec<_> = nc.variables().map(|v| v.name()).collect();
+    wtr.write_record(&names)?;
+
+    for ii in 0..ntime{
+        let mut row = vec![];
+        for vname in &names{
+            let v = nc.variable(vname.as_str()).unwrap();
+            let date_conv = if let Some(Ok(units)) = v.attribute_value("units"){
+                units == "seconds since 2000-01-01 00:00:00.0".into()
+            }
+            else{
+                false
+            };
+
+            let typ = v.vartype();
+            match typ{
+                netcdf::types::VariableType::Basic(netcdf::types::BasicType::Double) => {
+                    let val = v.get_value::<f64,_>([ii])?;
+                    if date_conv{
+                        let val = ncdate_to_date(val);
+                        row.push(format!("{}",val));
+                    }
+                    else{
+                        row.push(format!("{}",val));
+                    }
+                },
+                netcdf::types::VariableType::Basic(netcdf::types::BasicType::Int) => {
+                    let val = v.get_value::<i32,_>([ii])?;
+                    row.push(format!("{}",val));
+                },
+                _ => unimplemented!()
+            }
+            //let itm = v.get_value
+        }
+        wtr.write_record(&row)?;
+    }
+
+
+    Ok(())
+}
+
 
 #[cfg(test)]
 mod tests {
