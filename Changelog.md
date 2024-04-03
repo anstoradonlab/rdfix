@@ -1,4 +1,5 @@
 # Release 0.3.0
+3 April 2024
 
  - Output on regular grid
  - Output CSV as well as netCDF
