@@ -381,7 +381,6 @@ impl TimeInfo{
     pub fn idx(&self, interval_start: f64) -> usize{
         assert_ge!(interval_start, self.t_start);
         let idx = ((interval_start - self.t_start) / self.delta_t).round() as usize;
-        dbg!(&idx, &interval_start, &self.t_start, &self.delta_t);
         assert_le!(idx, self.ntime);
         idx
     }
@@ -434,9 +433,6 @@ where
 
     let mut ncout = netcdf::create(output_fname)?;
     let mut first_file = true;
-
-    let mut tidx_out: usize = 0;
-
     let tinfo = TimeInfo::new_from_info(ts, num_overlap, avg_duration);
 
     //TODO: replace with iteration
@@ -481,7 +477,7 @@ where
         // Calculate the starting index for output.  This contains unnecessary repetition
         // which should be refactored.
         let v = nc.variable("time").expect("No time variable");
-        let tidx_out_expected = if let Some(tau_out) = avg_duration {
+        let tidx_out = if let Some(tau_out) = avg_duration {
             let (idx0, idx1) = (num_overlap, ntime_in - num_overlap + 1);
             let extents = calc_time_dim_extents(&v, idx0, idx1);
 
@@ -558,7 +554,7 @@ where
                                 //tidx_out_expected = tinfo.idx(interval_start[0]);
                                 let mut vout_t0 = ncout.variable_mut("interval_start").unwrap();
                                 // this should have been written already.  Check for the expected value.
-                                assert_eq!(vout_t0.get_value::<f64, _>([tidx_out_expected]).unwrap(), interval_start[0]);
+                                assert_eq!(vout_t0.get_value::<f64, _>([tidx_out]).unwrap(), interval_start[0]);
                                 vout_t0.put(extents_out.clone(), interval_start.view())?;
                                 let mut vout_tm = ncout.variable_mut("interval_mid").unwrap();
                                 vout_tm.put(extents_out.clone(), interval_mid.view())?;
@@ -709,9 +705,6 @@ where
             }
         }
 
-        assert_eq!(tidx_out , tidx_out_expected);
-
-        tidx_out += ntime_out;
     }
 
     // Second pass over the output file, add the masked/unmasked versions of variables
@@ -724,7 +717,7 @@ where
         Some(var) => var.get_values::<i32, _>(..).expect("Error reading flag"),
         None => {
             error!("'flag' variable missing, flagging all data as 0 (Valid)");
-            vec![0; tidx_out]
+            vec![0; ncout.dimension("time").expect("Time dim missing").len()]
         }
     };
 
