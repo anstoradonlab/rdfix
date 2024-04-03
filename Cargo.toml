@@ -72,6 +72,8 @@ toml = "0.7.6"
 rand_chacha = "0.3"
 approx = "0.5.1"
 claim = "0.5.0"
+crossbeam = "0.8"
+crossbeam-utils = "0.8.19"
 
 #finitediff = {version="0.1.4", features = ["ndarray"]}
 #ode_solvers = "0.3"

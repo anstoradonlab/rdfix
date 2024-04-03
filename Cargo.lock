@@ -1545,6 +1545,8 @@ dependencies = [
  "clap",
  "cobyla",
  "criterion",
+ "crossbeam",
+ "crossbeam-utils",
  "csv",
  "derive_builder",
  "env_logger",
