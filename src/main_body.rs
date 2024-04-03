@@ -205,40 +205,61 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
         .map(|itm| itm.as_ref().unwrap_err())
         .collect::<Vec<_>>();
 
-    let output_fname = cmd_args.output.join("summary.nc");
-    let output_csv_fname = cmd_args.output.join("summary.csv");
-    let _pproc = postproc(
-        &ts,
-        processed_fnames.clone(),
-        config.inversion.overlapsize,
-        &output_fname,
-        None,
-    );
-    netcdf_to_csv(&output_fname, &output_csv_fname)?;
+    // postprocessing, three passes, 1) no averaging, 2) 30-min average, 3) 1-h average
+    // They can run in parallel (hopefully making it more likely that they'll
+    // read netCDF files from cache)
+    use crossbeam_utils::thread;
 
-    let output_fname = cmd_args.output.join("summary_30min_average.nc");
-    let output_csv_fname = cmd_args.output.join("summary_30min_average.csv");
+    thread::scope(|s| {
+        let output_fname = cmd_args.output.join("summary.nc");
+        let output_csv_fname = cmd_args.output.join("summary.csv");
+        let filenames = processed_fnames.clone();
+        let tsc = ts.clone();
+        s.spawn(move |_| {
+            let _pproc = postproc(
+                &tsc,
+                filenames,
+                config.inversion.overlapsize,
+                &output_fname,
+                None,
+            );
+            netcdf_to_csv(&output_fname, &output_csv_fname)?;
+            anyhow::Ok(())
+        });
 
-    let _pproc = postproc(
-        &ts,
-        processed_fnames.clone(),
-        config.inversion.overlapsize,
-        &output_fname,
-        Some(30 * 60),
-    );
-    netcdf_to_csv(&output_fname, &output_csv_fname)?;
+        let output_fname = cmd_args.output.join("summary_30min_average.nc");
+        let output_csv_fname = cmd_args.output.join("summary_30min_average.csv");
+        let filenames = processed_fnames.clone();
+        let tsc = ts.clone();
+        s.spawn(move |_| {
+            let _pproc = postproc(
+                &tsc,
+                filenames,
+                config.inversion.overlapsize,
+                &output_fname,
+                Some(30 * 60),
+            );
+            netcdf_to_csv(&output_fname, &output_csv_fname)?;
+            anyhow::Ok(())
+        });
 
-    let output_fname = cmd_args.output.join("summary_60min_average.nc");
-    let output_csv_fname = cmd_args.output.join("summary_60min_average.csv");
-
-    let _pproc = postproc(
-        &ts,
-        processed_fnames.clone(),
-        config.inversion.overlapsize,
-        &output_fname,
-        Some(60 * 60),
-    );
-    netcdf_to_csv(&output_fname, &output_csv_fname)?;
+        let output_fname = cmd_args.output.join("summary_60min_average.nc");
+        let output_csv_fname = cmd_args.output.join("summary_60min_average.csv");
+        let filenames = processed_fnames.clone();
+        let tsc = ts.clone();
+        s.spawn(move |_| {
+            let _pproc = postproc(
+                &tsc,
+                filenames,
+                config.inversion.overlapsize,
+                &output_fname,
+                Some(60 * 60),
+            );
+            netcdf_to_csv(&output_fname, &output_csv_fname)?;
+            anyhow::Ok(())
+        });
+    })
+    .expect("Crossbeam scoped threads failure");
 
     Ok(())
 }
