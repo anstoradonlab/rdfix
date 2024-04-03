@@ -90,7 +90,12 @@ fn create_template(cmd_args: &TemplateArgs) -> Result<()> {
 
     let output_dir = cmd_args.template_dir.clone().join("deconv-output");
     fs::create_dir_all(&output_dir)?;
-    println!("Template created.  Perform a test by running:\n> rdfix deconv --config {} --output {} {}", config_fname.display(), output_dir.display(), fname.display());
+    println!(
+        "Template created.  Perform a test by running:\n> rdfix deconv --config {} --output {} {}",
+        config_fname.display(),
+        output_dir.display(),
+        fname.display()
+    );
 
     Ok(())
 }
@@ -152,8 +157,8 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
             //    let e = panic_wrapper.unwrap_err();
             //    Err(anyhow!("{:?}", e.downcast_ref::<&str>()))
             //};
-            let fit_result = panic_wrapper.unwrap_or_else(|e| 
-                Err(anyhow!("{:?}", e.downcast_ref::<&str>())));
+            let fit_result =
+                panic_wrapper.unwrap_or_else(|e| Err(anyhow!("{:?}", e.downcast_ref::<&str>())));
             match fit_result {
                 Err(e) => {
                     let chunk_id = ts_chunk.chunk_id();
@@ -223,7 +228,6 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
     );
     netcdf_to_csv(&output_fname, &output_csv_fname)?;
 
-
     let output_fname = cmd_args.output.join("summary_60min_average.nc");
     let output_csv_fname = cmd_args.output.join("summary_60min_average.csv");
 
@@ -235,7 +239,6 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
         Some(60 * 60),
     );
     netcdf_to_csv(&output_fname, &output_csv_fname)?;
-
 
     Ok(())
 }

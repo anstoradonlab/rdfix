@@ -337,7 +337,7 @@ pub fn masked_vec(v: &[f64], mask: &[i32]) -> Vec<f64> {
     v
 }
 
-pub fn calc_tau_in(ts: &InputTimeSeries) -> usize{
+pub fn calc_tau_in(ts: &InputTimeSeries) -> usize {
     (ts.time[1] - ts.time[0]).round() as usize
 }
 
@@ -350,7 +350,7 @@ pub fn calc_tau_in(ts: &InputTimeSeries) -> usize{
 //    - use this information to generate a mapping from time t to index ii,
 //         ii = (t-t0) / Delta_t
 
-struct TimeInfo{
+struct TimeInfo {
     /// The time *at* the start of the analysis period, seconds since a reference time
     t_start: f64,
     /// The timestep, in seconds
@@ -359,14 +359,18 @@ struct TimeInfo{
     ntime: usize,
 }
 
-impl TimeInfo{
-    pub fn new_from_info(ts: &InputTimeSeries, num_overlap:usize, avg_duration: Option<usize>) -> Self{
+impl TimeInfo {
+    pub fn new_from_info(
+        ts: &InputTimeSeries,
+        num_overlap: usize,
+        avg_duration: Option<usize>,
+    ) -> Self {
         let tau_in = calc_tau_in(ts);
-        // -1 here because the timestamp convention on the input 
+        // -1 here because the timestamp convention on the input
         // is that t is the time at the end of the interval
-        let (delta_t, idx0) = if let Some(avg) = avg_duration{
-           (avg as f64, num_overlap)
-        } else{
+        let (delta_t, idx0) = if let Some(avg) = avg_duration {
+            (avg as f64, num_overlap)
+        } else {
             (tau_in as f64, num_overlap - 1)
         };
         let t_start = ts.time[idx0];
@@ -377,40 +381,48 @@ impl TimeInfo{
             ntime_in - num_overlap - num_overlap
         };
 
-        TimeInfo{t_start, delta_t, ntime: ntime_out}
+        TimeInfo {
+            t_start,
+            delta_t,
+            ntime: ntime_out,
+        }
     }
     /// Calculate index from time at start of interval
-    pub fn idx(&self, interval_start: f64) -> usize{
+    pub fn idx(&self, interval_start: f64) -> usize {
         assert_ge!(interval_start, self.t_start);
         let idx = ((interval_start - self.t_start) / self.delta_t).round() as usize;
         assert_le!(idx, self.ntime);
         idx
     }
 
-    pub fn idx_interval_end(&self, interval_end: f64) -> usize{
+    pub fn idx_interval_end(&self, interval_end: f64) -> usize {
         let interval_start = interval_end - self.delta_t;
         self.idx(interval_start)
     }
 
     pub fn interval_start(&self) -> ndarray::Array1<f64> {
-        ndarray::Array::range(self.t_start, 
-            self.t_start + self.delta_t*(self.ntime as f64 + 0.5),
-            self.delta_t)
+        ndarray::Array::range(
+            self.t_start,
+            self.t_start + self.delta_t * (self.ntime as f64 + 0.5),
+            self.delta_t,
+        )
     }
 
     pub fn interval_mid(&self) -> ndarray::Array1<f64> {
-        ndarray::Array::range(self.t_start + (self.delta_t as f64) / 2.0, 
-            self.t_start + self.delta_t*(self.ntime as f64 + 1.0),
-            self.delta_t)
+        ndarray::Array::range(
+            self.t_start + self.delta_t / 2.0,
+            self.t_start + self.delta_t * (self.ntime as f64 + 1.0),
+            self.delta_t,
+        )
     }
 
     pub fn interval_end(&self) -> ndarray::Array1<f64> {
-        ndarray::Array::range(self.t_start + (self.delta_t as f64), 
-            self.t_start + self.delta_t*(self.ntime as f64 + 1.5),
-            self.delta_t)
+        ndarray::Array::range(
+            self.t_start + self.delta_t,
+            self.t_start + self.delta_t * (self.ntime as f64 + 1.5),
+            self.delta_t,
+        )
     }
-
-
 }
 
 pub fn postproc<'a, I, P>(
@@ -449,7 +461,7 @@ where
         if first_file {
             copy_nc_structure(&nc, &mut ncout, avg_duration.is_some())?;
             // pre-write time variables, we write more if averaging is enabled
-            if avg_duration.is_some(){
+            if avg_duration.is_some() {
                 let mut vout = ncout.variable_mut("interval_start").unwrap();
                 vout.put(.., tinfo.interval_start().view())?;
                 let mut vout = ncout.variable_mut("interval_mid").unwrap();
@@ -458,8 +470,7 @@ where
                 vout.put(.., tinfo.interval_mid().view())?;
                 let mut vout = ncout.variable_mut("interval_end").unwrap();
                 vout.put(.., tinfo.interval_end().view())?;
-            }
-            else{
+            } else {
                 let mut vout = ncout.variable_mut("time").unwrap();
                 vout.put(.., tinfo.interval_end().view())?;
             }
@@ -485,16 +496,14 @@ where
 
             let data = v.get::<f64, _>(extents.clone())?;
             assert!(is_instantaneous_variable(&v));
-            let interval_mid = ndarray::Array1::from(
-                time_average_instantaneous(
-                    data.as_slice().unwrap(),
-                    tau_in,
-                    tau_out,
-                ));
-            tinfo.idx(interval_mid[0]- ((tau_out as f64) / 2.0))
+            let interval_mid = ndarray::Array1::from(time_average_instantaneous(
+                data.as_slice().unwrap(),
+                tau_in,
+                tau_out,
+            ));
+            tinfo.idx(interval_mid[0] - ((tau_out as f64) / 2.0))
         } else {
-            let (extents, _extents_out) =
-            calc_extents(&v, num_overlap, ntime_in, 0);
+            let (extents, _extents_out) = calc_extents(&v, num_overlap, ntime_in, 0);
             let data = v.get::<f64, _>(extents)?;
             tinfo.idx_interval_end(data[0])
         };
@@ -556,7 +565,10 @@ where
                                 //tidx_out_expected = tinfo.idx(interval_start[0]);
                                 let mut vout_t0 = ncout.variable_mut("interval_start").unwrap();
                                 // this should have been written already.  Check for the expected value.
-                                assert_eq!(vout_t0.get_value::<f64, _>([tidx_out]).unwrap(), interval_start[0]);
+                                assert_eq!(
+                                    vout_t0.get_value::<f64, _>([tidx_out]).unwrap(),
+                                    interval_start[0]
+                                );
                                 vout_t0.put(extents_out.clone(), interval_start.view())?;
                                 let mut vout_tm = ncout.variable_mut("interval_mid").unwrap();
                                 vout_tm.put(extents_out.clone(), interval_mid.view())?;
@@ -706,7 +718,6 @@ where
                 todo!();
             }
         }
-
     }
 
     // Second pass over the output file, add the masked/unmasked versions of variables
@@ -747,62 +758,60 @@ where
     Ok(())
 }
 
-
-fn ncdate_to_date(ncdate: f64) -> NaiveDateTime{
+fn ncdate_to_date(ncdate: f64) -> NaiveDateTime {
     let t: NaiveDateTime = *REFERENCE_TIME;
     t + chrono::TimeDelta::try_seconds(ncdate.round() as i64).unwrap()
-
 }
 
-pub fn netcdf_to_csv<P1,P2>(netcdf_fname: P1,csv_fname: P2) -> Result<()>
-where P1: AsRef<std::path::Path>,
-P2: AsRef<std::path::Path>,
+pub fn netcdf_to_csv<P1, P2>(netcdf_fname: P1, csv_fname: P2) -> Result<()>
+where
+    P1: AsRef<std::path::Path>,
+    P2: AsRef<std::path::Path>,
 {
     let nc = netcdf::open(netcdf_fname)?;
-    let ntime = nc.dimension("time").expect("NetCDF needs time dimensions").len();
+    let ntime = nc
+        .dimension("time")
+        .expect("NetCDF needs time dimensions")
+        .len();
 
     let mut wtr = csv::Writer::from_path(csv_fname)?;
     let names: Vec<_> = nc.variables().map(|v| v.name()).collect();
     wtr.write_record(&names)?;
 
-    for ii in 0..ntime{
+    for ii in 0..ntime {
         let mut row = vec![];
-        for vname in &names{
+        for vname in &names {
             let v = nc.variable(vname.as_str()).unwrap();
-            let date_conv = if let Some(Ok(units)) = v.attribute_value("units"){
+            let date_conv = if let Some(Ok(units)) = v.attribute_value("units") {
                 units == "seconds since 2000-01-01 00:00:00.0".into()
-            }
-            else{
+            } else {
                 false
             };
 
             let typ = v.vartype();
-            match typ{
+            match typ {
                 netcdf::types::VariableType::Basic(netcdf::types::BasicType::Double) => {
-                    let val = v.get_value::<f64,_>([ii])?;
-                    if date_conv{
+                    let val = v.get_value::<f64, _>([ii])?;
+                    if date_conv {
                         let val = ncdate_to_date(val);
-                        row.push(format!("{}",val));
+                        row.push(format!("{}", val));
+                    } else {
+                        row.push(format!("{}", val));
                     }
-                    else{
-                        row.push(format!("{}",val));
-                    }
-                },
+                }
                 netcdf::types::VariableType::Basic(netcdf::types::BasicType::Int) => {
-                    let val = v.get_value::<i32,_>([ii])?;
-                    row.push(format!("{}",val));
-                },
-                _ => unimplemented!()
+                    let val = v.get_value::<i32, _>([ii])?;
+                    row.push(format!("{}", val));
+                }
+                _ => unimplemented!(),
             }
             //let itm = v.get_value
         }
         wtr.write_record(&row)?;
     }
 
-
     Ok(())
 }
-
 
 #[cfg(test)]
 mod tests {

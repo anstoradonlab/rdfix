@@ -525,7 +525,6 @@ impl DetectorInverseModel {
         let exflow_scale_neff = n_effective.slice(s![1]);
         let radon_neff = n_effective.slice(s![2..]);
 
-
         // 100 iterations of 10 walkers as burn-in
         //let chain = &chain[num_walkers * num_burn_in_samples..];
 
@@ -534,8 +533,6 @@ impl DetectorInverseModel {
         let r_screen_scale_samples = samples.slice(s![0, .., ..]).map(|x| x.exp());
         let exflow_scale_samples = samples.slice(s![1, .., ..]).map(|x| x.exp());
         let transformed_radon_samples = samples.slice(s![2.., .., ..]);
-
-
 
         // inverse transform
 
@@ -595,12 +592,7 @@ impl DetectorInverseModel {
             r_screen_scale_samples,
             exflow_scale_samples,
             radon_samples,
-            GridVariable::new_from_parts(
-                vec![acc_frac],
-                "sampler_acceptance_fraction",
-                &[],
-                None,
-            ),
+            GridVariable::new_from_parts(vec![acc_frac], "sampler_acceptance_fraction", &[], None),
             GridVariable::new_from_parts(
                 r_screen_scale_neff.into_dyn().into_owned(),
                 "r_screen_effective_samples_per_walker",
@@ -619,8 +611,6 @@ impl DetectorInverseModel {
                 &["time"],
                 None,
             ),
-
-
         ];
 
         Ok(data)

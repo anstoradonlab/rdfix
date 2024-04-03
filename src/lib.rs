@@ -13,7 +13,7 @@ pub mod postproc;
 
 use anyhow::Result;
 use chrono::{prelude::*, Duration};
-use data::{GridVariable, GridVarData};
+use data::{GridVarData, GridVariable};
 use forward::constants::{REFERENCE_TIME, TIME_UNITS};
 use ndarray::ArrayView1;
 use rand::prelude::Distribution;
@@ -365,7 +365,6 @@ impl InputRecordVec {
         );
         data.push(v);
 
-
         //DataSet::new_from_variables(data)
         data
     }
@@ -385,7 +384,8 @@ impl TimeExtents for InputRecordVec {
     fn time_extents(&self) -> (NaiveDateTime, NaiveDateTime) {
         let t: NaiveDateTime = *REFERENCE_TIME;
         let t0 = t + chrono::TimeDelta::try_seconds(self.time[0].round() as i64).unwrap();
-        let t1 = t + chrono::TimeDelta::try_seconds(self.time[self.len() - 1].round() as i64).unwrap();
+        let t1 =
+            t + chrono::TimeDelta::try_seconds(self.time[self.len() - 1].round() as i64).unwrap();
         (t0, t1)
     }
 

@@ -597,8 +597,8 @@ impl DetectorForwardModel {
         // 1 cc/hour converted to m3/sec
         let q_fill_value = (1.0 / 1000.0) / 3600.0;
 
-        let q_external = (self.data.q_external[0] * self.p.exflow_scale)
-            .clamp(q_fill_value, f64::MAX);
+        let q_external =
+            (self.data.q_external[0] * self.p.exflow_scale).clamp(q_fill_value, f64::MAX);
         let r_screen = self.p.r_screen * self.p.r_screen_scale;
 
         // Note: this is Ok if volume_delay = 0
