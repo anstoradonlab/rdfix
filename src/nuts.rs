@@ -170,7 +170,8 @@ fn d_lnprob_nuts_wrapper(
     _theta: &[f64],
     _grad: &mut [f64],
     _logp: &mut f64,
-) -> f64 {
+    _seed: &mut f64,
+)  {
     unimplemented!();
 }
 

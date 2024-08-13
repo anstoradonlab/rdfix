@@ -631,23 +631,14 @@ impl DetectorInverseModel {
         rnavg
     }
 
-    pub fn lnprob_f64(&self, theta: &[f64], context: LogProbContext) -> f64 {
-        let mut theta_p = Vec::<f64>::with_capacity(theta.len());
-        for itm in theta {
-            theta_p.push(*itm)
-        }
-        self.generic_lnprob(&theta_p, context)
-    }
-
     /// Specialised version of lnprob function intended for use with NUTS sampler
     pub fn lnprob_nuts(&self, theta: &[f64]) -> f64 {
         self.lnprob_f64(theta, LogProbContext::NutsSample)
     }
 
-    /// Generic lnprob function which can take differentiable values and is therefore
-    /// usable with the autdiff crate (`P` is for "Potentially differentiable")
+    /// The log-probability function
     #[inline(always)]
-    pub fn generic_lnprob(&self, theta: &[f64], context: LogProbContext) -> f64 {
+    pub fn lnprob_f64(&self, theta: &[f64], context: LogProbContext) -> f64 {
         // Note: invalid prior results are signaled by
         // returning -std::f64::INFINITY
 
@@ -1335,13 +1326,13 @@ mod tests {
         // println!("initial guess: {:#?}", init_param.values);
         println!(
             "initial guess cost function evaluation: {}",
-            cost.generic_lnprob(&init_param, LogProbContext::MapSearch)
+            cost.lnprob_f64(&init_param, LogProbContext::MapSearch)
         );
 
         // println!("const radon guess: {:#?}", worse_guess.values);
         println!(
             "Bad guess cost function evaluation: {}",
-            cost.generic_lnprob(&worse_guess, LogProbContext::MapSearch)
+            cost.lnprob_f64(&worse_guess, LogProbContext::MapSearch)
         );
     }
 
@@ -1368,7 +1359,7 @@ mod tests {
             ts: ts.clone(),
             fwd: fwd.clone(),
         };
-        let lnprob_max = cost.generic_lnprob(&init_param, LogProbContext::MapSearch);
+        let lnprob_max = cost.lnprob_f64(&init_param, LogProbContext::MapSearch);
         // println!("initial guess: {:#?}", init_param.values);
         println!("cost function evaluation at MAP: {}", &lnprob_max);
         for idx in 0..npts {
@@ -1389,7 +1380,7 @@ mod tests {
                 ts: ts.clone(),
                 fwd: fwd.clone(),
             };
-            let lnprob_perturbed = cost.generic_lnprob(&init_param, LogProbContext::MapSearch);
+            let lnprob_perturbed = cost.lnprob_f64(&init_param, LogProbContext::MapSearch);
             dbg!(&lnprob_perturbed, &lnprob_max);
 
             assert!(lnprob_perturbed < lnprob_max)
@@ -1443,7 +1434,7 @@ mod tests {
         let pvec = ndarray::Array1::from_vec(init_param.clone());
         println!(
             "initial guess cost function evaluation: {}",
-            cost.generic_lnprob(&init_param, LogProbContext::MapSearch)
+            cost.lnprob_f64(&init_param, LogProbContext::MapSearch)
         );
         println!(
             "Initial guess cost function gradient: {:?}",
@@ -1454,7 +1445,7 @@ mod tests {
         let worse_pvec = ndarray::Array1::from_vec(worse_guess.clone());
         println!(
             "Bad guess cost function evaluation: {}",
-            cost.generic_lnprob(&worse_guess, LogProbContext::MapSearch)
+            cost.lnprob_f64(&worse_guess, LogProbContext::MapSearch)
         );
         println!(
             "Bad guess cost function gradient: {:?}\n       pvec: {:?}",

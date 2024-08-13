@@ -69,15 +69,6 @@ fn objective_function(c: &mut Criterion) {
 
     //let pvec = ndarray::Array1::from_vec(init_param.clone());
 
-    c.bench_function("Objective function, cost", |b| {
-        b.iter(|| {
-            cost.generic_lnprob(
-                init_param.clone().as_slice(),
-                rdfix::LogProbContext::MapSearch,
-            )
-        })
-    });
-
     c.bench_function("Objective function, explicit f64, cost", |b| {
         b.iter(|| {
             cost.lnprob_f64(
