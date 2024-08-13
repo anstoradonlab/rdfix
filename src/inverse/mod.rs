@@ -1396,7 +1396,7 @@ mod tests {
         }
     }
 
-    #[cfg(enzyme_ad)]
+    #[cfg(feature="enzyme_ad")]
     #[test]
     fn can_compute_lnprob_with_gradient() {
         let p = DetectorParamsBuilder::default().build().unwrap();
@@ -1463,7 +1463,7 @@ mod tests {
         );
     }
 
-    #[cfg(enzyme_ad)]
+    #[cfg(feature="enzyme_ad")]
     #[test]
     fn gradient_is_sensitive_to_ambient_radon() {
         let p = DetectorParamsBuilder::default().build().unwrap();

@@ -136,7 +136,7 @@ impl InvOptsHelper {
         Const,
         Const,
         Duplicated,
-        Active
+        Duplicated,
     )
 )]
 fn lnprob_nuts_wrapper(
@@ -145,7 +145,8 @@ fn lnprob_nuts_wrapper(
     ts: InputRecordVec,      // Const
     fwd: forward::DetectorForwardModel,      // Const
     theta: &[f64], // Duplicated
-) -> f64 {
+    lnprob: &mut f64,
+)  {
     let mut inv_opts = InversionOptionsBuilder::default().build().unwrap();
         inv_opts.r_screen_sigma = inv_opt[0];
         inv_opts.exflow_sigma = inv_opt[1];
@@ -156,7 +157,7 @@ fn lnprob_nuts_wrapper(
         fwd,
     };
 
-    inv.lnprob_nuts(theta)
+    *lnprob = inv.lnprob_nuts(theta);
 }
 
 #[cfg(not(feature = "enzyme_ad"))]
@@ -168,6 +169,7 @@ fn d_lnprob_nuts_wrapper(
     _fwd: forward::DetectorForwardModel,
     _theta: &[f64],
     _grad: &mut [f64],
+    _logp: &mut f64,
 ) -> f64 {
     unimplemented!();
 }
@@ -180,19 +182,23 @@ impl CpuLogpFunc for DetectorInverseModel {
     }
 
     fn logp(&mut self, position: &[f64], grad: &mut [f64]) -> Result<f64, Self::LogpError> {
-        let helper = InvOptsHelper::from_inv_opts(&self.inv_opts);
+        //let helper = InvOptsHelper::from_inv_opts(&self.inv_opts);
         let inv_opt = [self.inv_opts.r_screen_sigma, self.inv_opts.exflow_sigma];
         let inv_opt = inv_opt.as_slice();
-        let logp = lnprob_nuts_wrapper(
+        let mut logp = 0.0;
+        lnprob_nuts_wrapper(
             &inv_opt,
             self.p.clone(),
             self.ts.clone(),
             self.fwd.clone(),
             position,
+            &mut logp,
         );
         //for itm in &mut *grad {*itm=0.0};
+        let mut _logp = 0.0;
+        let mut seed = 1.0;
         let (dparams, dtheta) = grad.split_at_mut(2);
-        let _logp_again = d_lnprob_nuts_wrapper(
+        d_lnprob_nuts_wrapper(
             inv_opt,
             dparams,
             self.p.clone(),
@@ -200,6 +206,8 @@ impl CpuLogpFunc for DetectorInverseModel {
             self.fwd.clone(),
             position,
             dtheta,
+            &mut _logp,
+            &mut seed,
         );
         //dbg!(&grad);
         Ok(logp)
@@ -310,7 +318,7 @@ pub fn test(npts: usize, depth: Option<u64>) -> Result<()> {
 }
 
 #[cfg(test)]
-#[cfg(enzyme_ad)]
+#[cfg(feature = "enzyme_ad")]
 mod tests {
     use super::*;
 
