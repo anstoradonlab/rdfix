@@ -59,7 +59,7 @@ rand = "0.8.5"
 rand_pcg = "0.3.1"
 arrayvec = "0.7.2"
 # argmin_testfunctions = "0.1.1"
-nuts-rs = "0.6"
+nuts-rs = "0.12"
 thiserror = "1.0"
 rayon = "1.7.0"
 netcdf = { version = "0.9", features = ["ndarray", "static"] }
@@ -88,12 +88,12 @@ crossbeam-utils = "0.8"
 [profile.dev]
 opt-level = 3
 debug = true
-#lto = "fat"
+lto = "fat"
 
 [profile.test]
 opt-level = 3
 debug = true
-#lto = "fat"
+lto = "fat"
 
 [profile.release]
 opt-level = 3
@@ -102,8 +102,8 @@ debug = true
 # The profile that 'cargo dist' will build with
 [profile.dist]
 inherits = "release"
-lto = "thin"
-#lto = "fat"
+#lto = "thin"
+lto = "fat"
 
 [[bin]]
 name="rdfix"
