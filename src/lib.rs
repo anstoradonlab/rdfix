@@ -1,3 +1,5 @@
+#![cfg_attr(feature = "enzyme_ad", feature(autodiff))]
+
 //! # This is a markdown title inside the file `lib.rs`
 
 pub mod appconfig;

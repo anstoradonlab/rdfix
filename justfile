@@ -1,6 +1,9 @@
 build:
     cargo build --release
 
+build-enzyme:
+    RUSTFLAGS="-Z unstable-options" cargo +enzyme build -F enzyme_ad
+
 setup_validate:
     rm -rf validation
     cargo run --release -- template -t validation cal-peak-one-day
