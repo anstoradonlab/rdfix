@@ -2,7 +2,7 @@
 
 Perform a response time correction on two-filter dual-flow-loop radon detector output using the method from https://doi.org/10.5194/amt-9-2689-2016
 
-This is a re-write of [a Python-based code](https://github.com/agriff86/rd-deconvolve) into rust and it's (hopefully) a much nicer to install and use.  It's my first attempt at using rust, so the code itself is pretty
+This is a re-write of [a Python-based code](https://github.com/agriff86/rd-deconvolve) into rust and it's (hopefully) much nicer to install and use.  It's my first attempt at using rust, so the code itself is pretty
 horrible.
 
 Currently, the algorithm uses an MCMC sampler based on [hammer_and_sample](https://docs.rs/hammer-and-sample/latest/hammer_and_sample/) which itself is based on [EMCEE](https://emcee.readthedocs.io/en/stable/), the sampler used in the Python version of this code.
@@ -24,18 +24,20 @@ Rust is required for compiling `rdfix` from source.
 First, [install rust](https://www.rust-lang.org/tools/install).  Then, execute
 
 ```bash
-cargo install --locked --git https://github.com/anstoradonlab/rdfix.git
+cargo install --locked --tag v0.3.0 --git https://github.com/anstoradonlab/rdfix.git
 ```
 
-to download the clone the repository, compile the `rdfix` binary, and copy to a place in your `$PATH`.  To do these three steps manually:
+to download the clone the repository, compile the `rdfix` binary, and copy to a place in your `$PATH`.  Replace `--tag v0.3.0` with the version you wish to install, or leave it out to install from the main branch.
+
+To do these three steps manually:
 
  clone the repository, 
 
 ```bash
-git clone https://github.com
+git clone https://github.com/anstoradonlab/rdfix.git
 ```
 
-finally compile using cargo
+compile using cargo
 
 ```bash
 cargo build --release
@@ -45,7 +47,7 @@ then copy the binary from `target/release/rdfix` to a place in your `$PATH`.
 
 
 
-## Quick start rddeconv
+## Quick start
 
 ### 1 Set up a test case
 
@@ -117,9 +119,9 @@ Most of these options can be left as their default values, especially for a firs
 
  ### 5 Edit the data file
 
- The `raw-data.csv` file contains input data.  Modify your file so that it contains your data.  The columns are:
+ The `raw-data.csv` file contains input data.  Modify this so that it contains your data.  The columns are:
 
-  - `time`: Timestamp (at the end of interval) in YYYY-mm-dd HH:MM:SS format.  Presently, this must be 30-minute intervals without gaps.  If you're running 
+  - `time`: Timestamp (at the end of interval) in YYYY-mm-dd HH:MM:SS format.  **Presently, this must be 30-minute intervals without gaps.** 
   - `counts`: Net counts over the period (t-deltaT, t).  Missing values are allowed, indicated with `NaN`
   - `background_count_rate`: Background count rate, counts/sec. If provided in counts/30-minute, then divide by 1800 (seconds/half-hour).
   - `sensitivity`: Detector calibration coefficient, (counts/sec)/(Bq/m3)
@@ -140,7 +142,7 @@ pipe_area = np.pi * (100 / 1000 / 2.0) ** 2
 df["q_internal"] = df.inflow * pipe_area
 ```
 
-It is possible to make these changes in a spreadsheet, or use Python, R, etc. to write out a csv file.  There is some pre-processing required to work out the background count rate and detector sensitivity.
+It is possible to make these changes in a spreadsheet, or use Python, R, etc. to write out a csv file.  There is some other pre-processing required to work out the background count rate and detector sensitivity.
 
 ### 6 Run deconvolution
 
@@ -162,8 +164,12 @@ and csv format:
 
 
 The most useful variables are:
- - `radon`: best estimate of the radon concentration
+ - `radon`: best single estimate of the radon concentration, the mean of the Bayesian posterior distribution also known as a Bayes estimator.
  
 and these variables, which act as uncertainty bounds,
- - `radon_q160`: estimate of the radon 0.16th quantile (a.k.a 16th percentile)
+ - `radon_q025`: estimate of the radon 0.025th quantile (a.k.a 2.5th percentile)
+ - `radon_q160`: estimate of the radon 0.16th quantile
  - `radon_q840`: estimate of the radon 0.84th quantile
+ - `radon_q975`: estimate of the radon 0.975th quantile
+
+A combination of `radon_q025` and `radon_q975` yeilds a Bayesian 95% credible interval, roughly analagous to quoting ±2σ error bands.
