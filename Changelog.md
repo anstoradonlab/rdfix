@@ -1,3 +1,9 @@
+# Release 0.4.0
+17 Dec 2024
+
+ - Experimental release to facilitate more widespread testing
+ - Non-user-visible changes working towards Enzyme Autodiff support
+
 # Release 0.3.0
 3 April 2024
 
