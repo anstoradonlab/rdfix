@@ -20,7 +20,7 @@ enzyme_ad = []
 [dependencies]
 derive_builder = "0.20"
 rdfix_gf = {path="./rdfix_gf"}
-statrs = "0.17"
+#statrs = "0.17"
 autodifflib = {package="autodiff", version="0.7"}
 anyhow = "1.0"
 env_logger = "0.11"
@@ -74,6 +74,9 @@ approx = "0.5"
 claim = "0.5"
 crossbeam = "0.8"
 crossbeam-utils = "0.8"
+# Note: switch to statsrs release 0.18 when it is out
+# Using GitHub version here to avoid dependency on nalgebra
+statrs = { git = "https://github.com/statrs-dev/statrs.git", rev = "a514992b", default-features = false, features = ["rand"] }
 
 #finitediff = {version="0.1.4", features = ["ndarray"]}
 #ode_solvers = "0.3"
@@ -98,6 +101,7 @@ lto = "fat"
 [profile.release]
 opt-level = 3
 debug = true
+lto = "fat"
 
 # The profile that 'cargo dist' will build with
 [profile.dist]

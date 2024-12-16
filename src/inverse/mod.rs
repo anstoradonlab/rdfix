@@ -7,6 +7,7 @@ use thiserror::Error;
 
 use crate::data::DataSet;
 use crate::data::GridVariable;
+use crate::forward::InterpolationOption;
 use crate::LogProbContext;
 
 use crate::inverse::generic_primitives::exp_transform;
@@ -95,10 +96,10 @@ fn transform_constrained_to_unconstrained(x: f64) -> f64 {
         let p = (x - a) / (b - a);
         let result = checked_logit(p);
         match result {
-            Ok(y) => y,
+            Some(y) => y,
             // TODO: attach context to the error using ThisError or Anyhow
-            Err(e) => {
-                panic!("{}", e);
+            None => {
+                panic!("Error in checked_logit");
             }
         }
     };
@@ -319,6 +320,12 @@ pub struct InversionOptions {
     /// pulses.
     #[builder(default = "20.0")]
     pub sigma_delta_threshold: f64,
+    /// Should radon be treated as a piecewise linear function (good
+    /// for deconvolution of observations, default) or a piecewise constant 
+    /// function (good for calibration pulses)
+    #[serde(default)]
+    #[builder(default = "InterpolationOption::default()")]
+    pub radon_interpolation_option: InterpolationOption,
     /// MCMC sampling strategy
     #[builder(default = "SamplerKind::Emcee")]
     pub sampler_kind: SamplerKind,
@@ -686,12 +693,12 @@ impl DetectorInverseModel {
             //lp = lp - (r_screen_scale - f64::from(1.1).unwrap()) * (r_screen_scale - f64::from(1.1).unwrap());
             r_screen_scale = 1.1;
         }
-        if exflow_scale < half {
+        if exflow_scale < 0.1 {
             //lp = lp - (exflow_scale - half) * (exflow_scale - half) * thousand;
-            exflow_scale = half;
-        } else if exflow_scale > two {
+            exflow_scale = 0.1;
+        } else if exflow_scale > 10.0 {
             //  lp = lp - (exflow_scale - two) * (exflow_scale - two);
-            exflow_scale = two;
+            exflow_scale = 10.0;
         }
 
         if !lp.is_finite() {
@@ -706,28 +713,25 @@ impl DetectorInverseModel {
 
         assert!(lp.is_finite());
 
+        /*
         // Lognormal priors
         let r_screen_scale_mu = 1.0f64.ln();
         let r_screen_scale_sigma = self.inv_opts.r_screen_sigma;
         lprior += lognormal_ln_pdf(r_screen_scale_mu, r_screen_scale_sigma, r_screen_scale);
 
-        // TODO: get exflow from data instead of from the parameters
         let exflow_scale_mu = 1.0f64.ln();
         let exflow_sigma = self.inv_opts.exflow_sigma;
         lprior += lognormal_ln_pdf(exflow_scale_mu, exflow_sigma, exflow_scale);
+        */
 
         // Normal priors on parameters
         let r_screen_scale_mu = 1.0;
         let r_screen_scale_sigma = self.inv_opts.r_screen_sigma;
-        lprior += normal_ln_pdf(r_screen_scale_mu, 1.0, r_screen_scale);
-
-        let r_screen_scale = (r_screen_scale - 1.0) * r_screen_scale_sigma + 1.0;
+        lprior += normal_ln_pdf(r_screen_scale_mu, r_screen_scale_sigma, r_screen_scale);
 
         let exflow_scale_mu = 1.0;
         let exflow_sigma = self.inv_opts.exflow_sigma;
-        lprior += normal_ln_pdf(exflow_scale_mu, 1.0, exflow_scale);
-
-        let exflow_scale = (exflow_scale - 1.0) * exflow_sigma + 1.0;
+        lprior += normal_ln_pdf(exflow_scale_mu, exflow_sigma, exflow_scale);
 
         // println!("{:?} {:?} {:?} {:?} || {:?} {:?} || {:?}", r_screen_scale_mu, r_screen_scale_sigma, exflow_scale_mu, exflow_sigma, r_screen_scale, exflow_scale, lprior);
 
@@ -1159,7 +1163,9 @@ pub fn fit_inverse_model(
 
     let fwd = DetectorForwardModelBuilder::default()
         .data(ts.clone())
+        .p(p.clone())
         .time_step(time_step)
+        .radon_interpolation_option(inv_opts.radon_interpolation_option)
         .radon(initial_radon_scaled.clone())
         .build()
         .expect("Failed to build detector model");
@@ -1199,12 +1205,16 @@ pub fn fit_inverse_model(
             let (transformed_r_screen_scale, transformed_exflow_scale, transformed_map_radon) =
                 unpack_state_vector(&v, &inv_opts);
 
-            let _r_screen_scale = transformed_r_screen_scale.exp();
-            let _exflow_scale = transformed_exflow_scale.exp();
+            let map_r_screen_scale = transformed_r_screen_scale.exp();
+            let map_exflow_scale = transformed_exflow_scale.exp();
             let map_radon: Vec<_> = transformed_map_radon
                 .iter()
                 .map(|x| x.exp() * mean_radon)
                 .collect();
+
+            info!("MAP radon: {:?}", map_radon);
+            info!("MAP r_screen scale factor {:?}", map_r_screen_scale);
+            info!("MAP q_external scale factor {:?}", map_exflow_scale);
 
             data.push(GridVariable::new_from_parts(
                 ArrayD::from_shape_vec(vec![map_radon.len()], map_radon.clone())?,
@@ -1212,14 +1222,12 @@ pub fn fit_inverse_model(
                 &["time"],
                 None,
             ));
-            // TODO: log MAP radon, r_screen_scale, exflow_scale
             Some(map_radon)
         }
     } else {
         None
     };
 
-    info!("MAP radon: {:?}", map_radon);
 
     match inv_opts.sampler_kind {
         SamplerKind::Emcee => {
@@ -1251,6 +1259,8 @@ mod tests {
     use crate::forward::DetectorParamsBuilder;
     use crate::InputRecord;
     use crate::InputRecordVec;
+    use crate::TestTimeseries;
+    use crate::TimeseriesKind;
 
     use assert_approx_eq::assert_approx_eq;
 
@@ -1337,14 +1347,15 @@ mod tests {
     }
 
     #[test]
-    fn lnprob_changes_if_radon_changes() {
+    fn lnprob_changes_if_parameters_change() {
         let p = DetectorParamsBuilder::default().build().unwrap();
         let inv_opts = InversionOptionsBuilder::default().build().unwrap();
         let npts = 10;
-        let ts = get_timeseries(npts);
+        let ts = TestTimeseries::new(npts, TimeseriesKind::CalibrationPulse { low_value: 10.0, high_value: 100.0 }).ts();
+
         let time_step = 60.0 * 30.0; //TODO
                                      // Define initial parameter vector and cost function
-        let initial_radon = calc_radon_without_deconvolution(&ts, time_step);
+        let initial_radon = ts.radon_truth.clone();
         // calculate lnprob reference value (it's the exact solution, so should be == lnprob_max)
         let init_param = pack_state_vector(&initial_radon, p.clone(), ts.clone(), inv_opts);
         let fwd = DetectorForwardModelBuilder::default()
@@ -1367,7 +1378,7 @@ mod tests {
             too_high_radon[idx] += 1.0;
 
             // calculate lprob for perturbed radon timeseries
-            let init_param = pack_state_vector(&too_high_radon, p.clone(), ts.clone(), inv_opts);
+            let param = pack_state_vector(&too_high_radon, p.clone(), ts.clone(), inv_opts);
             let fwd = DetectorForwardModelBuilder::default()
                 .data(ts.clone())
                 .time_step(time_step)
@@ -1380,11 +1391,41 @@ mod tests {
                 ts: ts.clone(),
                 fwd: fwd.clone(),
             };
-            let lnprob_perturbed = cost.lnprob_f64(&init_param, LogProbContext::MapSearch);
+            let lnprob_perturbed = cost.lnprob_f64(&param, LogProbContext::MapSearch);
             dbg!(&lnprob_perturbed, &lnprob_max);
 
             assert!(lnprob_perturbed < lnprob_max)
         }
+        // calculate ln prob for perturbed exflow
+        let mut p1 = p.clone();
+        p1.exflow_scale *= 0.1;
+        let mut p2 = p.clone();
+        p2.r_screen_scale *= 0.1;
+        let param1 = pack_state_vector(&initial_radon, p1.clone(), ts.clone(), inv_opts);
+        let param2 = pack_state_vector(&initial_radon, p2.clone(), ts.clone(), inv_opts);
+        let fwd = DetectorForwardModelBuilder::default()
+            .data(ts.clone())
+            .time_step(time_step)
+            .radon(initial_radon.clone())
+            .build()
+            .expect("Failed to build detector model");
+        let cost = DetectorInverseModel {
+            p: p.clone(),
+            inv_opts: inv_opts,
+            ts: ts.clone(),
+            fwd: fwd.clone(),
+        };
+        let lnprob_perturbed1 = cost.lnprob_f64(&param1, LogProbContext::MapSearch);
+        dbg!(&lnprob_perturbed1, &lnprob_max);
+        // Perturbing exflow_scale affects lnprob
+        assert!(lnprob_perturbed1 < lnprob_max);
+
+        let lnprob_perturbed2 = cost.lnprob_f64(&param2, LogProbContext::MapSearch);
+        dbg!(&lnprob_perturbed2, &lnprob_max);
+        // Perturbing r_screen_scale affects lnprob
+        assert!(lnprob_perturbed2 < lnprob_max);
+
+
     }
 
     #[cfg(feature="enzyme_ad")]

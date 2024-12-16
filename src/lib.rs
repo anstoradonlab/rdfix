@@ -17,6 +17,7 @@ use anyhow::Result;
 use chrono::{prelude::*, Duration};
 use data::{GridVarData, GridVariable};
 use forward::constants::{REFERENCE_TIME, TIME_UNITS};
+use forward::InterpolationOption;
 use ndarray::ArrayView1;
 use rand::prelude::Distribution;
 use serde::{Deserialize, Serialize};
@@ -490,6 +491,7 @@ impl TestTimeseries {
                     .radon(ts.radon_truth.clone())
                     .data(ts.clone())
                     .time_step(time_step)
+                    .radon_interpolation_option(InterpolationOption::PiecewiseConstant)
                     .build()
                     .unwrap();
                 let expected_counts = fwd.numerical_expected_counts().unwrap();

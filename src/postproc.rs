@@ -9,6 +9,7 @@ use statrs::statistics::Statistics;
 use std::path::PathBuf;
 
 use crate::forward::constants::REFERENCE_TIME;
+use crate::forward::InterpolationOption;
 use crate::InputTimeSeries;
 
 fn is_mcmc_variable(v: &netcdf::Variable) -> bool {
@@ -430,6 +431,7 @@ pub fn postproc<'a, I, P>(
     filenames: I,
     num_overlap: usize,
     output_fname: P,
+    radon_interpolation_option: InterpolationOption,
     avg_duration: Option<usize>,
 ) -> Result<()>
 where
@@ -627,7 +629,10 @@ where
                         for mut x in data.lanes_mut(ndarray::Axis(idx_time_dim)) {
                             // ensure we have a contiguous slice to work with
                             let xs = x.to_vec();
-                            let mut ys = time_average_instantaneous(xs.as_slice(), tau_in, tau_out);
+                            let mut ys = match radon_interpolation_option{
+                                InterpolationOption::Linear => time_average_instantaneous(xs.as_slice(), tau_in, tau_out),
+                                InterpolationOption::PiecewiseConstant => time_average(xs.as_slice(), tau_in, tau_out),
+                            };
 
                             assert_eq!(ntime_out, ys.len());
 
