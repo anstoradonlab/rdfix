@@ -1,3 +1,4 @@
+use std::fmt::write;
 /// These are the main top-level driver functions
 use std::fs;
 use std::fs::File;
@@ -221,6 +222,7 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
                 filenames,
                 config.inversion.overlapsize,
                 &output_fname,
+                config.inversion.radon_interpolation_option,
                 None,
             );
             netcdf_to_csv(&output_fname, &output_csv_fname)?;
@@ -237,6 +239,7 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
                 filenames,
                 config.inversion.overlapsize,
                 &output_fname,
+                config.inversion.radon_interpolation_option,
                 Some(30 * 60),
             );
             netcdf_to_csv(&output_fname, &output_csv_fname)?;
@@ -253,6 +256,7 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
                 filenames,
                 config.inversion.overlapsize,
                 &output_fname,
+                config.inversion.radon_interpolation_option,
                 Some(60 * 60),
             );
             netcdf_to_csv(&output_fname, &output_csv_fname)?;

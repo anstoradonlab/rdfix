@@ -73,9 +73,13 @@ pub struct DetectorParams {
     /// The external flow rate is taken from the data file
     #[builder(default = "1.0")]
     pub exflow_scale: f64,
+
+    /*
     /// 1500 L in about 3 minutes in units of m3/s
     #[builder(default = "1.5/60.")]
     pub inflow: f64,
+    */
+
     /// Main radon delay volume (default 1.5 m3)
     #[builder(default = "1.5")]
     pub volume: f64,
@@ -117,6 +121,14 @@ impl DetectorParamsBuilder {
     }
 }
 
+#[derive(Debug, Copy, Clone, Default, Serialize, Deserialize)]
+
+pub enum InterpolationOption{
+    #[default]
+    Linear,
+    PiecewiseConstant,
+}
+
 #[derive(Debug, Clone, Builder)]
 #[builder(build_fn(validate = "Self::validate"))]
 pub struct DetectorForwardModel {
@@ -150,6 +162,8 @@ pub struct DetectorForwardModel {
     pub cal_duration: f64,
     #[builder(default = "60")]
     pub integration_substeps: usize,
+    #[builder(default = "InterpolationOption::default()")]
+    pub radon_interpolation_option: InterpolationOption,
 
     #[builder(
         default = "Interpolator::new(self.data.as_ref().unwrap().len(), self.time_step.unwrap())"
@@ -308,9 +322,10 @@ impl DetectorForwardModel {
 
         //let airt_points = &self.airt_points;
 
-        // TODO: make radon switchable between linear and stepwise
-        //let radon = linear_interpolation(ti, &self.radon, tmax);
-        let radon = interp.linear(&self.radon);
+        let radon = match self.radon_interpolation_option{
+            InterpolationOption::Linear => interp.linear(&self.radon),
+            InterpolationOption::PiecewiseConstant => interp.stepwise(&self.radon),
+        };
 
         // Extract interpolated values from linear or stepwise,
         // depending on the variable
@@ -425,27 +440,37 @@ impl DetectorForwardModel {
         // transit time assuming plug flow in the tank
         //let tt = self.p.volume / q_internal;
 
-        // This call to calc_na_nb factors takes up a large fraction of the run time
-        // Thread-local storage is used to memorise the function result, avoiding the
-        // need to re-evaluate the function when it is called with repeated values
-        thread_local! {
-            static ARG: Cell<[f64;3]> = const { Cell::new([f64::NAN; 3]) };
-            static VAL: Cell<[f64;2]> = const { Cell::new([f64::NAN; 2]) };
-        };
-        let args = [q_internal, self.p.volume, self.p.plateout_time_constant];
+        let mut n_a = 0.0;
+        let mut n_b = 0.0;
+        if cfg!(feature = "enzyme_ad"){
+            // Enzyme might have trouble with this tread_local trick
+            (n_a, n_b) = gf::calc_na_nb_factors(q_internal, self.p.volume, self.p.plateout_time_constant)
+            .into();
+        }
+        else{
+            // This call to calc_na_nb factors takes up a large fraction of the run time
+            // Thread-local storage is used to memorise the function result, avoiding the
+            // need to re-evaluate the function when it is called with repeated values
+            thread_local! {
+                static ARG: Cell<[f64;3]> = const { Cell::new([f64::NAN; 3]) };
+                static VAL: Cell<[f64;2]> = const { Cell::new([f64::NAN; 2]) };
+            };
+            let args = [q_internal, self.p.volume, self.p.plateout_time_constant];
 
-        let [n_a, n_b] = if ARG.get() == args {
-            // Args are the same as previous call
-            VAL.get()
-        } else {
-            // Need to run the function because arguments have changed
-            let val =
-                gf::calc_na_nb_factors(q_internal, self.p.volume, self.p.plateout_time_constant)
-                    .into();
-            ARG.set(args);
-            VAL.set(val);
-            val
-        };
+            [n_a, n_b] = if ARG.get() == args {
+                // Args are the same as previous call
+                VAL.get()
+            } else {
+                // Need to run the function because arguments have changed
+                let val =
+                    gf::calc_na_nb_factors(q_internal, self.p.volume, self.p.plateout_time_constant)
+                        .into();
+                ARG.set(args);
+                VAL.set(val);
+                val
+            };
+
+        }
 
         //let (n_a, n_b) =
         //    gf::calc_na_nb_factors(q_internal, self.p.volume, self.p.plateout_time_constant);
@@ -527,27 +552,33 @@ fn calc_eff_and_recoil_prob(
     let rn = rn_d2 / (lamrn * v_tank / q_external + 1.0);
     //let rn = radon0; // TODO: come up with a better approach
 
-    // This call to steady_state_count_rate takes about 20-30% of the total time spent evaluating the
-    // objective function in calculations of the inverse model.  This is an approach to
-    // cache the result so that repeated evaluations are fast.
-    thread_local! {
-        static ARG: Cell<[f64;6]> = const { Cell::new([0.0; 6]) };
-        static VAL: Cell<f64> = const { Cell::new(f64::NAN) };
-    };
-    let args = [q, v_tank, eff, lamp, recoil_prob, rs];
-    let ssc;
-    let ssc = if ARG.get() == args {
-        // Args are the same as previous call
-        VAL.get()
-    } else {
-        // Need to run the function because arguments have changed
-        ssc = gf::steady_state_count_rate(q, v_tank, eff, lamp, recoil_prob, rs);
-        ARG.set(args);
-        VAL.set(ssc);
-        ssc
-    };
+    let mut ssc = 0.0;
 
-    // let ssc = gf::steady_state_count_rate(q, v_tank, eff, lamp, recoil_prob, rs);
+    if cfg!(feature="enzyme_ad"){
+        // Enzyme might have trouble with this tread_local trick
+        ssc = gf::steady_state_count_rate(q, v_tank, eff, lamp, recoil_prob, rs);
+    }
+    else{
+        // This call to steady_state_count_rate takes about 20-30% of the total time spent evaluating the
+        // objective function in calculations of the inverse model.  This is an approach to
+        // cache the result so that repeated evaluations are fast.
+        thread_local! {
+            static ARG: Cell<[f64;6]> = const { Cell::new([0.0; 6]) };
+            static VAL: Cell<f64> = const { Cell::new(f64::NAN) };
+        };
+        let args = [q, v_tank, eff, lamp, recoil_prob, rs];
+        ssc = if ARG.get() == args {
+            // Args are the same as previous call
+            VAL.get()
+        } else {
+            // Need to run the function because arguments have changed
+            ssc = gf::steady_state_count_rate(q, v_tank, eff, lamp, recoil_prob, rs);
+            ARG.set(args);
+            VAL.set(ssc);
+            ssc
+        };
+    }
+
     let corrected_ssc = ssc * rn / radon0;
     let eff = eff * total_efficiency / corrected_ssc;
     (eff, recoil_prob)
@@ -700,7 +731,7 @@ impl DetectorForwardModel {
 
 #[cfg(test)]
 mod tests {
-    use crate::InputRecord;
+    use crate::{inverse::InversionOptionsBuilder, InputRecord, TestTimeseries, TimeseriesKind};
 
     use super::*;
     use assert_approx_eq::assert_approx_eq;
@@ -712,7 +743,7 @@ mod tests {
             .build()
             .expect("Detector creation failed");
         // test a default value
-        assert!(p.inflow == 1.5 / 60.);
+        assert_eq!(p.volume, 1.5);
         // test a set value
         assert!(p.delay_time == 1.0);
         // test default 700L detector
@@ -891,4 +922,43 @@ mod tests {
         assert!(num_counts.len() == radon.len());
         dbg!(&num_counts);
     }
+
+    #[test]
+    fn output_depends_on_parameters() {
+        let p = DetectorParamsBuilder::default().build().unwrap();
+        let npts = 48;
+        let ts = TestTimeseries::new(npts, TimeseriesKind::CalibrationPulse { low_value: 10.0, high_value: 100.0 }).ts();
+
+        let time_step = 60.0 * 30.0; //TODO
+                                     // Define initial parameter vector and cost function
+        let initial_radon = ts.radon_truth.clone();
+
+        let fwd = DetectorForwardModelBuilder::default()
+            .data(ts.clone())
+            .p(p)
+            .time_step(time_step)
+            .radon(initial_radon.clone())
+            .build()
+            .expect("Failed to build detector model");
+
+        let fwd_base = fwd.clone();
+        let mut fwd_exflow = fwd.clone();
+        fwd_exflow.p.exflow_scale *= 0.5;
+        let mut fwd_rscreen = fwd.clone();
+        fwd_rscreen.p.r_screen_scale *= 0.5;
+
+        let counts_ref = fwd_base.numerical_expected_counts().unwrap();
+        let counts_exflow = fwd_exflow.numerical_expected_counts().unwrap();
+        let counts_r_screen = fwd_rscreen.numerical_expected_counts().unwrap();
+
+        for ii in 0..counts_ref.len(){
+            dbg!(&counts_ref[ii], &counts_exflow[ii], &counts_r_screen[ii]);
+        }
+
+        assert!(counts_ref.iter().zip(counts_exflow.iter()).any(|(x1,x2)| x1 != x2));
+        assert!(counts_ref.iter().zip(counts_r_screen.iter()).any(|(x1,x2)| x1 != x2));
+
+    }
+
+
 }

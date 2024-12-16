@@ -1,5 +1,6 @@
 use anyhow::Result;
 use argmin::core::Gradient;
+use hammer_and_sample::Model;
 use ndarray::{Array1, ArrayView1};
 
 pub use nuts_rs::{Chain, CpuMath, CpuLogpFunc, LogpError, SampleStats, Settings, DiagGradNutsSettings};
@@ -41,6 +42,7 @@ impl PosteriorDensity {
 
         let fwd = DetectorForwardModelBuilder::default()
             .data(ts.clone())
+            .p(p.clone())
             .time_step(time_step)
             .radon(initial_radon.clone())
             .build()
@@ -131,7 +133,7 @@ impl InvOptsHelper {
     autodiff(
         d_lnprob_nuts_wrapper,
         Reverse,
-        Duplicated,
+        Const,
         Const,
         Const,
         Const,
@@ -140,16 +142,17 @@ impl InvOptsHelper {
     )
 )]
 fn lnprob_nuts_wrapper(
-    inv_opt: &[f64],        // Duplicated
+    inv_opt: &[f64],        // Const
     p: DetectorParams,      // Const
     ts: InputRecordVec,      // Const
     fwd: forward::DetectorForwardModel,      // Const
     theta: &[f64], // Duplicated
     lnprob: &mut f64,
 )  {
-    let mut inv_opts = InversionOptionsBuilder::default().build().unwrap();
-        inv_opts.r_screen_sigma = inv_opt[0];
-        inv_opts.exflow_sigma = inv_opt[1];
+    //let mut inv_opts = InversionOptionsBuilder::default().build().unwrap();
+    let inv_opts_default = InversionOptionsBuilder::default().build().unwrap();
+    let inv_opts = InversionOptions { r_screen_sigma: inv_opt[0], exflow_sigma: inv_opt[1],
+    ..inv_opts_default};
     let inv: DetectorInverseModel = DetectorInverseModel {
         p,
         inv_opts: inv_opts,
@@ -163,7 +166,6 @@ fn lnprob_nuts_wrapper(
 #[cfg(not(feature = "enzyme_ad"))]
 fn d_lnprob_nuts_wrapper(
     _inv_opts: &[f64],
-    _inv_opts_grad: &mut[f64],
     _p: DetectorParams,
     _ts: InputRecordVec,
     _fwd: forward::DetectorForwardModel,
@@ -198,10 +200,12 @@ impl CpuLogpFunc for DetectorInverseModel {
         //for itm in &mut *grad {*itm=0.0};
         let mut _logp = 0.0;
         let mut seed = 1.0;
-        let (dparams, dtheta) = grad.split_at_mut(2);
+        // zero out the gradient each time this is called (as required by enzyme)
+        grad.fill(0.0);
+        let (_dparams, dtheta) = grad.split_at_mut(2);
         d_lnprob_nuts_wrapper(
             inv_opt,
-            dparams,
+            //dparams,
             self.p.clone(),
             self.ts.clone(),
             self.fwd.clone(),
@@ -236,6 +240,14 @@ impl DetectorInverseModel {
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let math = CpuMath::new(logp_func);
         let mut sampler = settings.new_chain(chain, math, &mut rng);
+
+        // Attempt to calculate gradient
+        let mut test_logp_func = self.clone();
+        let test_theta = vec![0.0f64; dim];
+        let mut test_gradient = vec![0.0f64; dim];
+        let logp_result = test_logp_func.logp(&test_theta, &mut test_gradient);
+
+        dbg!(&logp_result, &test_theta, &test_gradient);
 
         // Set to some initial position and start drawing samples.
         // Note: it's not possible to use ? here because the NUTS error isn't Sync
