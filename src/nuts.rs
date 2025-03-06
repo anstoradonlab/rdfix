@@ -125,6 +125,9 @@ impl InvOptsHelper {
 ///
 /// There are a lot of unnecessary clone calls, fingers crossed that the compiler optimises
 /// them away
+ 
+#[cfg(feature="enzyme_ad")]
+use std::autodiff::autodiff;
 
 //Reference: https://enzyme.mit.edu/index.fcgi/rust/usage/rev.html
 // `#[autodiff]` should use activities (Const|Active|Duplicated|DuplicatedNoNeed)

@@ -6,10 +6,11 @@ build-enzyme:
     #RUSTFLAGS="-Z unstable-options" cargo +enzyme build -F enzyme_ad
 
 test-enzyme:
-    cargo +enzyme test --release -F enzyme_ad
+    #cargo +enzyme test --release -F enzyme_ad
     #RUSTFLAGS="-Z unstable-options" cargo +enzyme test --release -F enzyme_ad
     #RUSTFLAGS="-Z unstable-options -Z autodiff=LooseTypes" cargo +enzyme test -F enzyme_ad
     #RUSTFLAGS="-Z unstable-options -Z autodiff=OPT" cargo +enzyme test -F enzyme_ad
+    RUSTFLAGS="-Zautodiff=Enable" cargo +enzyme test -F enzyme_ad
 
 setup_validate:
     rm -rf validation
