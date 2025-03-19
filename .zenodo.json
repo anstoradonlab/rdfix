@@ -1,0 +1,26 @@
+{
+    "creators": [
+        {
+            "orcid": "0000-0003-1135-1810",
+            "affiliation": "Australian Nuclear Science and Technology Organisation",
+            "name": "Griffiths, Alan"
+        }
+        
+    ],
+
+    "license": "Apache-2.0 or MIT",
+
+    "title": "Radon Data Fixer, response-time correction (deconvolution) for ANSTO radon detectors",
+
+    "related_identifiers": [
+        {
+            "scheme": "doi",
+            "identifier": "10.5194/amt-9-2689-2016",
+            "relation": "isDocumentedBy",
+            "resource_type": "publication-article"
+        }
+    ],
+
+    "keywords": ["Radon-222"]
+
+}
