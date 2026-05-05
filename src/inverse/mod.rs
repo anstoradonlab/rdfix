@@ -1,6 +1,7 @@
 mod generic_primitives;
 
 use anyhow::Result;
+use rand::RngExt;
 use std::collections::HashMap;
 use std::time::SystemTime;
 use thiserror::Error;
@@ -47,7 +48,7 @@ use argmin::solver::trustregion::TrustRegion;
 
 pub use argmin::core::{CostFunction, Error, Executor, Gradient, Hessian, State};
 
-use hammer_and_sample::{sample, MinChainLen, Model, Parallel};
+use hammer_and_sample::{sample, MinChainLen, Model, Parallel, Stretch};
 use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg64;
 
@@ -418,7 +419,7 @@ impl Model for DetectorInverseModel {
         self.lnprob_f64(state.as_slice(), LogProbContext::EmceeSample)
     }
 
-    const SCALE: f64 = 2.;
+    // const SCALE: f64 = 2.;
 }
 
 impl DetectorInverseModel {
@@ -458,7 +459,7 @@ impl DetectorInverseModel {
             let mut rng = Pcg64::seed_from_u64(seed.try_into().unwrap());
             let p = (0..dim)
                 .zip(initial_state.clone())
-                .map(|(_, x)| x + rng.gen_range(-1.0..=1.0) / 1e4)
+                .map(|(_, x)| x + rng.random_range(-1.0..=1.0) / 1e4)
                 .collect();
             (p, rng)
         });
@@ -466,6 +467,7 @@ impl DetectorInverseModel {
         info!("EMCEE running {} burn-in iterations", num_burn_in_samples);
         let (burn_in_chain, _accepted) = sample(
             self,
+            &Stretch::default(),
             walkers,
             MinChainLen(num_walkers * num_burn_in_samples),
             Parallel,
@@ -484,6 +486,7 @@ impl DetectorInverseModel {
         info!("EMCEE running {} sampling iterations", num_samples);
         let (chain, accepted) = sample(
             self,
+            &Stretch::default(),
             walkers,
             MinChainLen(num_walkers * num_samples),
             Parallel,

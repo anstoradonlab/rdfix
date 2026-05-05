@@ -19,7 +19,7 @@ use data::{GridVarData, GridVariable};
 use forward::constants::{REFERENCE_TIME, TIME_UNITS};
 use forward::InterpolationOption;
 use ndarray::ArrayView1;
-use rand::prelude::Distribution;
+use rand_statsrs::prelude::Distribution;
 use serde::{Deserialize, Serialize};
 use statrs::distribution::Poisson;
 use std::collections::HashMap;
@@ -457,7 +457,7 @@ impl TestTimeseries {
                 let expected_counts =
                     (value / self.trec.sensitivity + self.trec.background_count_rate) * time_step;
                 let dist = Poisson::new(expected_counts).unwrap();
-                let mut rng = rand::thread_rng();
+                let mut rng = rand_statsrs::thread_rng();
 
                 for itm in ts.counts.iter_mut() {
                     *itm = dist.sample(&mut rng);
@@ -474,7 +474,7 @@ impl TestTimeseries {
             } => {
                 // Add Poisson noise to constant values, with a
                 // low value (ambient) and high value (during cal)
-                let mut rng = rand::thread_rng();
+                let mut rng = rand_statsrs::thread_rng();
 
                 let secs_per_day = 3600. * 24.;
                 let high_start = 9. * 3600.;

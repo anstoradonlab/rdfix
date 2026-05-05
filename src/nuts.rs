@@ -1,11 +1,17 @@
 use anyhow::Result;
 use argmin::core::Gradient;
-use hammer_and_sample::Model;
+//use hammer_and_sample::Model;
 use ndarray::{Array1, ArrayView1};
 
-pub use nuts_rs::{Chain, CpuMath, CpuLogpFunc, LogpError, SampleStats, Settings, DiagGradNutsSettings};
-use rand::SeedableRng;
-use rand_chacha::ChaCha8Rng;
+use nuts_rs::{
+    ArrowConfig, CpuLogpFunc, CpuMath, CpuMathError, DiagGradNutsSettings, LogpError, Model,
+    Sampler, SamplerWaitResult, Storable, Chain,
+};
+use nuts_rs::Settings;
+use nuts_storable::{HasDims, Value};
+use rand::{Rng, RngExt};
+//use rand::SeedableRng;
+//use rand_chacha::ChaCha8Rng;
 use thiserror::Error;
 
 use super::forward::{DetectorForwardModelBuilder, DetectorParams, DetectorParamsBuilder};
@@ -61,6 +67,46 @@ impl PosteriorDensity {
     }
 }
 
+impl HasDims for PosteriorDensity{
+    fn dim_sizes(&self) -> HashMap<String, u64> {
+        HashMap::from([
+            // Dimension for the actual parameter vector x
+            ("x".to_string(), self.dim as u64),
+        ])
+
+    }
+}
+
+/*
+// Dimension definitions (MVP)
+impl HasDims for PosteriorDensity {
+    /// Define dimension names and sizes for storage
+    ///
+    /// This tells the storage system what array dimensions to expect.
+    /// These dimensions will be used to structure the output data using
+    /// Arrow's FixedShapeTensor extension type.
+    fn dim_sizes(&self) -> HashMap<String, u64> {
+        HashMap::from([
+            // Dimension for the actual parameter vector x
+            ("x".to_string(), self.dim as u64),
+        ])
+    }
+
+    fn coords(&self) -> HashMap<String, nuts_storable::Value> {
+
+
+        let v: Vec<String> = (1..self.dim+1)
+        .map(|ii| format!("x{}", ii))
+        .collect();
+
+        HashMap::from([(
+            "x".to_string(),
+            Value::Strings(v),
+        )])
+    }
+}
+*/
+
 // The density might fail in a recoverable or non-recoverable manner...
 #[derive(Debug, Error)]
 pub enum PosteriorLogpError {}
@@ -70,9 +116,22 @@ impl LogpError for PosteriorLogpError {
     }
 }
 
+/// The `Storable` derive macro automatically generates code to store this
+/// struct in the trace. The `dims` attribute specifies which dimension
+/// each field should use. Multi-dimensional fields will be stored as
+/// FixedShapeTensor extension types in Arrow format.
+#[derive(Storable)]
+struct ExpandedDraw {
+    /// Store the parameter values with dimension "x"
+    #[storable(dims("x"))]
+    prec: Vec<f64>,
+}
+
 /// NUTS sampler trait template (from documentation)
 impl CpuLogpFunc for PosteriorDensity {
     type LogpError = PosteriorLogpError;
+    type FlowParameters = (); // No parameter transformations needed
+    type ExpandedVector = ExpandedDraw;
 
     fn dim(&self) -> usize {
         self.dim
@@ -88,7 +147,26 @@ impl CpuLogpFunc for PosteriorDensity {
         }
         Ok(logp)
     }
+
+    /// This function is called for each accepted sample to compute derived
+    /// quantities that should be stored in the trace. These might be
+    /// transformed parameters, predictions, or other quantities of interest.
+    fn expand_vector<R: Rng + ?Sized>(
+        &mut self,
+        _rng: &mut R,
+        array: &[f64],
+    ) -> Result<Self::ExpandedVector, CpuMathError> {
+        // Store the raw parameter values
+        Ok(ExpandedDraw {
+            prec: array.to_vec(),
+        })
+    }
+
+    fn vector_coord(&self) -> Option<Value> {
+        Some(Value::Strings(vec!["x1".to_string(), "x2".to_string()]))
+    }
 }
+
 
 /// lnprob_nuts_wrapper helper struct
 ///
@@ -180,8 +258,23 @@ fn d_lnprob_nuts_wrapper(
     unimplemented!();
 }
 
+impl HasDims for DetectorInverseModel{
+    fn dim_sizes(&self) -> HashMap<String, u64> {
+        HashMap::from([
+            // Dimension for the actual parameter vector x
+            ("x".to_string(), self.dim() as u64),
+        ])
+
+    }
+}
+
+
+
 impl CpuLogpFunc for DetectorInverseModel {
     type LogpError = PosteriorLogpError;
+    type FlowParameters = ();
+    type ExpandedVector = Vec<f64>;
+
 
     fn dim(&self) -> usize {
         self.ts.len() + NUM_VARYING_PARAMETERS
@@ -220,6 +313,17 @@ impl CpuLogpFunc for DetectorInverseModel {
         //dbg!(&grad);
         Ok(logp)
     }
+    
+    
+    fn expand_vector<R>(
+        &mut self,
+        rng: &mut R,
+        array: &[f64],
+    ) -> std::result::Result<Self::ExpandedVector, CpuMathError>
+    where
+        R: rand::Rng + ?Sized {
+        todo!()
+    }
 }
 
 impl DetectorInverseModel {
@@ -240,7 +344,8 @@ impl DetectorInverseModel {
 
         let chain = 0;
         let seed = 42;
-        let mut rng = ChaCha8Rng::seed_from_u64(seed);
+        //let mut rng = ChaCha8Rng::seed_from_u64(seed);
+        let mut rng = rand::rng();
         let math = CpuMath::new(logp_func);
         let mut sampler = settings.new_chain(chain, math, &mut rng);
 
@@ -301,7 +406,8 @@ pub fn test(npts: usize, depth: Option<u64>) -> Result<()> {
 
     let chain = 0;
     let seed = 42;
-    let mut rng = ChaCha8Rng::seed_from_u64(seed);
+    //let mut rng = ChaCha8Rng::seed_from_u64(seed);
+    let mut rng = rand::rng();
     let math = CpuMath::new(logp_func);
     let mut sampler = settings.new_chain(chain, math, &mut rng);
 
