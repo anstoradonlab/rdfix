@@ -39,7 +39,7 @@ serde = { version = "1", features = ["derive"] }
 #openblas-src = { version = "0.10", features = ["cblas", "system"] }
 
 ## 3. use ndarray without blas
-ndarray = { version = "0.15", features = ["serde"] }
+ndarray = { version = "0.16", features = ["serde"] }
 
 
 num = "0.4"
@@ -64,7 +64,7 @@ nuts-rs = {version = "0.18", features = ["ndarray", "arrow"]}
 nuts-storable = "0.3.0"
 thiserror = "1.0"
 rayon = "1.12.0"
-netcdf = { version = "0.9", features = ["ndarray", "static"] }
+netcdf = { version = "0.10", features = ["ndarray", "static"] }
 tempfile = "3.6.0"
 chrono = { version = "0.4", features = ["serde"] }
 lazy_static = "1.4.0"

@@ -586,13 +586,11 @@ where
                         // data
                         let typ = v.vartype();
                         match typ {
-                            netcdf::types::VariableType::Basic(netcdf::types::BasicType::Int) => {
+                            netcdf::types::NcVariableType::Int(netcdf::types::IntType::I32) => {
                                 let data = v.get::<i32, _>(extents)?;
                                 vout.put(extents_out, data.view())?;
                             }
-                            netcdf::types::VariableType::Basic(
-                                netcdf::types::BasicType::Double,
-                            ) => {
+                            netcdf::types::NcVariableType::Float(netcdf::types::FloatType::F64) => {
                                 let data = v.get::<f64, _>(extents)?;
                                 //if v.name() == "time"{
                                 //    tidx_out_expected = tinfo.idx_interval_end(data[0]);
@@ -795,7 +793,7 @@ where
 
             let typ = v.vartype();
             match typ {
-                netcdf::types::VariableType::Basic(netcdf::types::BasicType::Double) => {
+                netcdf::types::NcVariableType::Float(netcdf::types::FloatType::F64) => {
                     let val = v.get_value::<f64, _>([ii])?;
                     if date_conv {
                         let val = ncdate_to_date(val);
@@ -804,7 +802,7 @@ where
                         row.push(format!("{}", val));
                     }
                 }
-                netcdf::types::VariableType::Basic(netcdf::types::BasicType::Int) => {
+                netcdf::types::NcVariableType::Int(netcdf::types::IntType::I32) => {
                     let val = v.get_value::<i32, _>([ii])?;
                     row.push(format!("{}", val));
                 }
