@@ -25,7 +25,7 @@ use self::generic_primitives::{normal_ln_pdf, poisson_ln_pmf};
 
 use super::forward::{DetectorForwardModel, DetectorForwardModelBuilder, DetectorParams};
 
-use cobyla::CobylaSolver;
+use cobyla_argmin::CobylaSolver;
 use hammer_and_sample::auto_corr_time;
 
 use ndarray::s;

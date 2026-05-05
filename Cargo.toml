@@ -50,10 +50,10 @@ itertools = "0.13"
 assert_approx_eq = "1.1"
 indicatif = "0.17"
 #num-traits = "0.2.15"
-argmin = {version="0.10"}
+argmin = {version="0.11"}
 # argmin-math = { version = "0.3", features = ["ndarray_latest-serde", "nalgebra_latest-serde"] }
 argmin-math = { version = "0.5", features = ["ndarray_latest"] }
-cobyla = "0.6"
+cobyla-argmin = "1.0"
 hammer-and-sample = {version = "0.6", features = ["rayon"]}
 rand = { version = "0.10", features = ["chacha"] }
 rand_pcg = "0.10"
