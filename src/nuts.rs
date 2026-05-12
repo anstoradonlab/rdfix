@@ -399,7 +399,8 @@ pub fn test(npts: usize, depth: Option<u64>) -> Result<()> {
     // We instanciate our posterior density function
     let p = DetectorParamsBuilder::default().build()?;
     let inv_opts = InversionOptionsBuilder::default().build()?;
-    let ts = get_test_timeseries(npts);
+    let time_step = 60.0*30.0;
+    let ts = get_test_timeseries(npts, time_step);
 
     let logp_func = PosteriorDensity::new(p, inv_opts, ts);
     let dim = logp_func.dim();

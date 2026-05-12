@@ -406,8 +406,8 @@ impl TimeExtents for InputRecordVec {
     }
 }
 
-pub fn get_test_timeseries(npts: usize) -> InputRecordVec {
-    TestTimeseries::new(npts, TimeseriesKind::Constant).ts()
+pub fn get_test_timeseries(npts: usize, time_step: f64) -> InputRecordVec {
+    TestTimeseries::new(npts, time_step, TimeseriesKind::Constant).ts()
 }
 
 #[derive(Default, Debug, Clone)]
@@ -426,14 +426,16 @@ pub enum TimeseriesKind {
 #[derive(Default, Debug, Clone)]
 pub struct TestTimeseries {
     npts: usize,
+    time_step: f64,
     trec: InputRecord,
     kind: TimeseriesKind,
 }
 
 impl TestTimeseries {
-    pub fn new(n: usize, kind: TimeseriesKind) -> Self {
+    pub fn new(n: usize, time_step: f64, kind: TimeseriesKind) -> Self {
         Self {
             npts: n,
+            time_step: time_step,
             trec: InputRecord::default(),
             kind,
         }
@@ -442,7 +444,7 @@ impl TestTimeseries {
     pub fn ts(&self) -> InputRecordVec {
         let mut ts = InputRecordVec::new();
         let mut t = 0.0;
-        let time_step = 60.0 * 30.0;
+        let time_step = self.time_step;
         for _ in 0..self.npts {
             let mut trec = self.trec;
             trec.time = t;
@@ -540,7 +542,8 @@ mod tests {
 
     #[test]
     fn calculate_average() {
-        let _ts = get_test_timeseries(100);
+        let time_step = 60.0*30.0;
+        let _ts = get_test_timeseries(100, time_step);
         /*
         let avg = ts.mean();
         let val = ts.get(0).unwrap().to_owned();
@@ -556,7 +559,8 @@ mod tests {
     }
     #[test]
     fn csv() {
-        let ts = get_test_timeseries(4);
+        let time_step = 60.0*30.0;
+        let ts = get_test_timeseries(4, time_step);
         let mut outfile = Vec::new();
         write_csv(&mut outfile, ts).unwrap();
         let s = String::from_utf8(outfile.clone()).unwrap();

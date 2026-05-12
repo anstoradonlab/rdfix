@@ -42,7 +42,8 @@ fn create_template(cmd_args: &TemplateArgs) -> Result<()> {
 
     let fname = cmd_args.template_dir.clone().join("raw-data.csv");
     info!("Writing example data file to {}", fname.display());
-    let mut ts = get_test_timeseries(48 * 3);
+    let time_step = 60.0 * 30.0;
+    let mut ts = get_test_timeseries(48 * 3, time_step);
     let mut config = AppConfigBuilder::default().build().unwrap();
     match cmd_args.template_kind {
         TemplateKind::Default => {}
@@ -52,11 +53,11 @@ fn create_template(cmd_args: &TemplateArgs) -> Result<()> {
             config.inversion.emcee.samples = 100;
         }
         TemplateKind::ConstantOneDay => {
-            ts = TestTimeseries::new(48, TimeseriesKind::NoisyConstant { value: 1.0 }).ts()
+            ts = TestTimeseries::new(48, time_step, TimeseriesKind::NoisyConstant { value: 1.0 }).ts()
         }
         TemplateKind::CalPeakOneDay => {
             ts = TestTimeseries::new(
-                48,
+                48, time_step,
                 TimeseriesKind::CalibrationPulse {
                     low_value: 1.0,
                     high_value: 100.0,
@@ -65,11 +66,11 @@ fn create_template(cmd_args: &TemplateArgs) -> Result<()> {
             .ts()
         }
         TemplateKind::ConstantMonth => {
-            ts = TestTimeseries::new(48 * 30, TimeseriesKind::NoisyConstant { value: 1.0 }).ts()
+            ts = TestTimeseries::new(48 * 30, time_step, TimeseriesKind::NoisyConstant { value: 1.0 }).ts()
         }
         TemplateKind::CalPeakMonth => {
             ts = TestTimeseries::new(
-                48 * 30,
+                48 * 30, time_step,
                 TimeseriesKind::CalibrationPulse {
                     low_value: 1.0,
                     high_value: 100.0,

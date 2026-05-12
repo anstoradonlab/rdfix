@@ -927,7 +927,8 @@ mod tests {
     fn output_depends_on_parameters() {
         let p = DetectorParamsBuilder::default().build().unwrap();
         let npts = 48;
-        let ts = TestTimeseries::new(npts, TimeseriesKind::CalibrationPulse { low_value: 10.0, high_value: 100.0 }).ts();
+        let time_step = 60.0*30.0;
+        let ts = TestTimeseries::new(npts, time_step, TimeseriesKind::CalibrationPulse { low_value: 10.0, high_value: 100.0 }).ts();
 
         let time_step = 60.0 * 30.0; //TODO
                                      // Define initial parameter vector and cost function

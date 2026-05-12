@@ -6,7 +6,7 @@ use rdfix::inverse::{fit_inverse_model, InversionOptionsBuilder};
 
 fn main() -> Result<()> {
     let npts = 48;
-    let mut ts = get_test_timeseries(npts);
+    let mut ts = get_test_timeseries(npts, 30.0*60.0);
     let radon = {
         let mut v = vec![1.0_f64; npts];
         for x in v[5..20].iter_mut() {
