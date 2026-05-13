@@ -1,3 +1,10 @@
+# Release 0.4.2
+
+13 May 2026
+
+ - Add a forward modelling command line interface (see `rdfix -h` for details)
+ - Update dependencies
+
 # Release 0.4.0
 17 Dec 2024
 

@@ -6,7 +6,7 @@ edition = "2021"
 repository = "https://github.com/anstoradonlab/rdfix"
 
 [workspace.package]
-version = "0.4.1"
+version = "0.4.2"
 
 [workspace.dependencies]
 num-traits = "0.2"

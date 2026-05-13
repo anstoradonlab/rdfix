@@ -2592,7 +2592,7 @@ dependencies = [
 
 [[package]]
 name = "rdfix"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "ad_trait",
  "anyhow",
@@ -2639,7 +2639,7 @@ dependencies = [
 
 [[package]]
 name = "rdfix_gf"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "num-traits",
 ]
