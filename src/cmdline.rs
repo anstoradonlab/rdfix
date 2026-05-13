@@ -97,6 +97,8 @@ pub enum TemplateKind {
     ConstantMonth,
     /// Hour-long calibration peak, one month of data
     CalPeakMonth,
+    /// One-minute timestep, one day long calibration peak.  Suitable for running forward model.
+    Forward,
 }
 
 pub fn parse_cmdline() -> Result<RdfixArgs> {

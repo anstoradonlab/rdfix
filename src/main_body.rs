@@ -4,10 +4,11 @@ use std::fs;
 use std::fs::File;
 use std::path::PathBuf;
 
-use anyhow::{anyhow, Error, Result};
+use anyhow::{Error, Result, anyhow, bail};
 use rayon::prelude::*;
 
 use crate::appconfig::AppConfigBuilder;
+use crate::forward::DetectorForwardModelBuilder;
 use crate::inverse::fit_inverse_model;
 use crate::postproc::{netcdf_to_csv, postproc};
 use crate::{cmdline::*, read_csv, TestTimeseries, TimeExtents, TimeseriesKind};
@@ -45,6 +46,7 @@ fn create_template(cmd_args: &TemplateArgs) -> Result<()> {
     let time_step = 60.0 * 30.0;
     let mut ts = get_test_timeseries(48 * 3, time_step);
     let mut config = AppConfigBuilder::default().build().unwrap();
+    let mut command_str = "deconv".to_owned();
     match cmd_args.template_kind {
         TemplateKind::Default => {}
         TemplateKind::Small => {
@@ -78,6 +80,20 @@ fn create_template(cmd_args: &TemplateArgs) -> Result<()> {
             )
             .ts()
         }
+        TemplateKind::Forward => {
+            let time_step = 60.0;
+            ts = TestTimeseries::new(
+                48 * 30, 
+                time_step,
+                TimeseriesKind::CalibrationPulse {
+                    low_value: 1.0,
+                    high_value: 100.0,
+                },
+            )
+            .ts();
+            ts.counts.iter_mut().for_each(|x| *x=f64::NAN);
+            command_str = "forward".to_owned();
+        }
     }
     let mut f = File::create(&fname)?;
     write_csv(&mut f, ts)?;
@@ -93,7 +109,8 @@ fn create_template(cmd_args: &TemplateArgs) -> Result<()> {
     let output_dir = cmd_args.template_dir.clone().join("deconv-output");
     fs::create_dir_all(&output_dir)?;
     println!(
-        "Template created.  Perform a test by running:\n> rdfix deconv --config {} --output {} {}",
+        "Template created.  Perform a test by running:\n> rdfix {} --config {} --output {} {}",
+        command_str,
         config_fname.display(),
         output_dir.display(),
         fname.display()
@@ -269,13 +286,57 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
     Ok(())
 }
 
+
+fn run_forward_model(cmd_args: &DeconvArgs) -> Result<()>{
+    // Load configuration file
+    info!("Loading configuration from {}", &cmd_args.config.display());
+    let raw_toml = std::fs::read_to_string(&cmd_args.config)?;
+    let config: crate::appconfig::AppConfig = toml::from_str(raw_toml.as_str())?;
+
+    // Load raw data files
+    let mut ts = InputTimeSeries::new();
+    for fname in cmd_args.input_files.iter() {
+        info!("Loading data from {}", fname.display());
+        let f = std::fs::File::open(fname)?;
+        let mut file_data = read_csv(f)?;
+        ts.append(&mut file_data);
+    }
+    if ts.len() < 2{
+        bail!("Input timeseries is too short")
+    }
+
+    let p = config.detector.clone();
+    let radon = ts.radon_truth.clone();
+    let time_step = ts.time[1] - ts.time[0];
+
+    let fwd = DetectorForwardModelBuilder::default()
+        .p(p)
+        .data(ts.clone())
+        .radon(radon)
+        .time_step(time_step)
+        .build()
+        .unwrap();
+
+    let num_counts = fwd.numerical_expected_counts().unwrap();
+    for (nc,mnc) in ts.counts.iter_mut().zip(&num_counts){
+        *nc = *mnc;
+    }
+    
+    let output_csv_fname = cmd_args.output.join("forward.csv");
+    fs::create_dir_all(&cmd_args.output)?;
+    let mut f = File::create(&output_csv_fname)?;
+    write_csv(&mut f, ts)?;
+
+    Ok(())
+}
+
 pub fn main_body(program_args: RdfixArgs) -> Result<()> {
     match &program_args.command {
         Commands::Template(cmd_args) => {
             create_template(cmd_args)?;
         }
         Commands::Deconv(cmd_args) => run_deconvolution(cmd_args)?,
-        Commands::Forward(_cmd_args) => todo!(), // run a forward model
+        Commands::Forward(cmd_args) => run_forward_model(cmd_args)?,
     }
     Ok(())
 }
