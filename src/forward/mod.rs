@@ -145,6 +145,8 @@ pub struct DetectorForwardModel {
     pub sensitivity_points: Vec<f64>,
     #[builder(default = "self.data.as_ref().unwrap().background_count_rate.clone()")]
     pub background_count_rate_points: Vec<f64>,
+    #[builder(default = "None")]
+    pub initial_condition: Option<[f64; NUM_STATE_VARIABLES]>,
 
     pub time_step: f64,
     pub radon: Vec<f64>,
@@ -697,7 +699,15 @@ impl DetectorForwardModel {
         let num_intervals = system.data.len() - 1;
         let _tmax = system.time_step * f64::from(num_intervals as u16);
         let dt = system.time_step;
-        let mut state = system.initial_state(system.radon[0]);
+        let mut state = if let Some(ic) = self.initial_condition{
+            ic
+            // let mut ic = ic.clone();
+            // ic[IDX_ACC_COUNTS] = 0.0;
+            // ic
+        }
+        else{
+            system.initial_state(system.radon[0])
+        };
 
         // number of small RK4 steps to take per dt
         let num_steps = 30_usize;
@@ -719,11 +729,20 @@ impl DetectorForwardModel {
     }
 
     #[inline(always)]
-    pub fn numerical_expected_counts(self) -> Result<Vec<f64>> {
+    pub fn numerical_expected_counts_and_state(self) -> Result<(Vec<f64>, [f64; NUM_STATE_VARIABLES])> {
         let y_out = self.numerical_solution()?;
         let expected_counts = y_out.iter().map(|itm| itm[IDX_ACC_COUNTS]).collect();
+        // Ok to use unwrap because numerical solution will always contain at least one element
+        let final_state = y_out.last().unwrap();
+        Ok((expected_counts, final_state.clone()))
+    }
+
+    #[inline(always)]
+    pub fn numerical_expected_counts(self) -> Result<Vec<f64>> {
+        let (expected_counts, _final_state) = self.numerical_expected_counts_and_state()?;
         Ok(expected_counts)
     }
+
 
     pub fn analytical_solution(&self) {}
     pub fn radon(&mut self, _radon: &[f64]) {}

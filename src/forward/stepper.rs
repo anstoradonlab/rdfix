@@ -26,7 +26,7 @@ pub fn integrate(
     // k3 = f(tn+h/2, yn + h*k2/2)
     // k4 = f(tn + h, yn + h*k3)
     // Ref: https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_methods
-    let mut t = t0;
+    let mut t: f64 = t0;
     let two = 2.0;
     let half = 0.5;
     let sixth = 1.0 / 6.0;

@@ -21,6 +21,11 @@ setup_validate_enzyme:
     # TODO: switch sampler kind over to Nuts
     cargo +enzyme run --release -F enzyme_ad -- template -t validation_enzyme cal-peak-one-day
 
+setup_validate_forward:
+    rm -rf validation_forward
+    cargo run --release -- template -t validation_forward forward
+
+
 validate_enzyme: setup_validate_enzyme
     cargo +enzyme run --release -F enzyme_ad -- deconv --config validation_enzyme/config.toml --output validation_enzyme/deconv-output validation_enzyme/raw-data.csv
 
@@ -33,3 +38,6 @@ setup_validate_month:
 
 validate_month: setup_validate_month
     cargo run --release -- deconv --config validation_month/config.toml --output validation_month/deconv-output validation_month/raw-data.csv
+
+validate_forward: setup_validate_forward
+    cargo run --release -- forward --config validation_forward/config.toml --output validation_forward/deconv-output validation_forward/raw-data.csv

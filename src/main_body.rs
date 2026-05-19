@@ -81,9 +81,11 @@ fn create_template(cmd_args: &TemplateArgs) -> Result<()> {
             .ts()
         }
         TemplateKind::Forward => {
+            // use a timestep of 60 seconds
             let time_step = 60.0;
+            // use a long length (60 days)
             ts = TestTimeseries::new(
-                48 * 30, 
+                24 * 60 * 60, 
                 time_step,
                 TimeseriesKind::CalibrationPulse {
                     low_value: 1.0,
@@ -96,7 +98,7 @@ fn create_template(cmd_args: &TemplateArgs) -> Result<()> {
         }
     }
     let mut f = File::create(&fname)?;
-    write_csv(&mut f, ts)?;
+    write_csv(&mut f, ts, true)?;
     let config_str = toml::to_string(&config).unwrap();
 
     let config_fname = cmd_args.template_dir.clone().join("config.toml");
@@ -191,7 +193,7 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
                         std::fs::create_dir(&output_dir)?;
                         let csv_fname = output_dir.join("raw-data.csv");
                         let mut f = File::create(csv_fname)?;
-                        write_csv(&mut f, ts_chunk)?;
+                        write_csv(&mut f, ts_chunk, true)?;
                         let config_str = toml::to_string(&config).unwrap();
                         let config_fname = output_dir.join("config.toml");
                         fs::write(config_fname, config_str)?;
@@ -305,27 +307,58 @@ fn run_forward_model(cmd_args: &DeconvArgs) -> Result<()>{
         bail!("Input timeseries is too short")
     }
 
-    let p = config.detector.clone();
-    let radon = ts.radon_truth.clone();
-    let time_step = ts.time[1] - ts.time[0];
+    let mut chunks = vec![];
+    // TODO: should take dt into account
+    // Note: chunking is used because the integrator fails if it is run for more than about 30 days
+    // this shouldn't happen, but in lieu of finding the root cause, we reset the integrator
+    // after each day of modelled time.  This matches how the model is used in deconvolution.
+    let chunksize = {
+        let time_step = ts.time[1] - ts.time[0];
+        let secs_per_day = 3600*24;
+        secs_per_day / (time_step as usize)
+    };
+    let overlapsize = 0;
+    chunks.extend(chunk_timeseries(
+        &ts,
+        chunksize,
+        overlapsize,
+    )?);
 
-    let fwd = DetectorForwardModelBuilder::default()
-        .p(p)
-        .data(ts.clone())
-        .radon(radon)
-        .time_step(time_step)
-        .build()
-        .unwrap();
+    let nchunks = chunks.len();
+    if nchunks > 1 {
+        info!("Input data split into {} chunks.", nchunks);
+    }
 
-    let num_counts = fwd.numerical_expected_counts().unwrap();
-    for (nc,mnc) in ts.counts.iter_mut().zip(&num_counts){
-        *nc = *mnc;
+    let mut ic = None;
+    for ts_chunk in chunks.iter_mut(){
+        let p = config.detector.clone();
+        let radon = ts_chunk.radon_truth.clone();
+        let time_step = ts_chunk.time[1] - ts_chunk.time[0];
+
+        let fwd = DetectorForwardModelBuilder::default()
+            .p(p)
+            .data(ts_chunk.clone())
+            .radon(radon)
+            .initial_condition(ic)
+            .time_step(time_step)
+            .build()
+            .unwrap();
+
+        let (num_counts,final_state) = fwd.numerical_expected_counts_and_state().unwrap();
+        for (nc,mnc) in ts_chunk.counts.iter_mut().zip(&num_counts){
+            *nc = *mnc;
+        }
+        ic = Some(final_state);
     }
     
     let output_csv_fname = cmd_args.output.join("forward.csv");
     fs::create_dir_all(&cmd_args.output)?;
     let mut f = File::create(&output_csv_fname)?;
-    write_csv(&mut f, ts)?;
+    let mut first = true;
+    for ts in chunks.iter(){
+        write_csv(&mut f, ts.clone(), first)?;
+        first = false;
+    }
 
     Ok(())
 }
