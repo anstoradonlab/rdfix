@@ -949,7 +949,7 @@ mod tests {
         let time_step = 60.0*30.0;
         let ts = TestTimeseries::new(npts, time_step, TimeseriesKind::CalibrationPulse { low_value: 10.0, high_value: 100.0 }).ts();
 
-        let time_step = 60.0 * 30.0; //TODO
+        let time_step = ts.time[1] - ts.time[0];
                                      // Define initial parameter vector and cost function
         let initial_radon = ts.radon_truth.clone();
 

@@ -12,7 +12,7 @@ fn _inv_benchmark(c: &mut Criterion) {
     let p = DetectorParamsBuilder::default().build().unwrap();
     let inv_opts = InversionOptionsBuilder::default().build().unwrap();
     let npts = 4;
-    let mut ts = get_test_timeseries(npts);
+    let mut ts = get_test_timeseries(npts, 30.0*60.0);
     ts.counts[npts - 1] += 500.0;
 
     c.bench_function("inv black_box", |b| {
@@ -31,7 +31,7 @@ fn _inv_benchmark_no_black_box(c: &mut Criterion) {
     let p = DetectorParamsBuilder::default().build().unwrap();
     let inv_opts = InversionOptionsBuilder::default().build().unwrap();
     let npts = 4;
-    let mut ts = get_test_timeseries(npts);
+    let mut ts = get_test_timeseries(npts, 30.0*60.0);
     ts.counts[npts - 1] += 500.0;
     c.bench_function("inv black_box", |b| {
         b.iter(|| {
@@ -45,12 +45,12 @@ fn objective_function(c: &mut Criterion) {
     let p = DetectorParamsBuilder::default().build().unwrap();
     let inv_opts = InversionOptionsBuilder::default().build().unwrap();
     let npts = 5;
-    let ts = get_test_timeseries(npts);
+    let time_step = 30.0 * 60.0;
+    let ts = get_test_timeseries(npts, time_step);
     let mut radon = vec![1.0; ts.len()];
     // set this value to something higher so that gradients will be non-zero
     radon[1] = 10.0;
 
-    let time_step = 30.0 * 60.0;
 
     let fwd = DetectorForwardModelBuilder::default()
         .data(ts.clone())
@@ -83,12 +83,12 @@ fn objective_function_func_npts(c: &mut Criterion) {
     fn getinput(npts: usize) -> (DetectorInverseModel, Vec<f64>) {
         let p = DetectorParamsBuilder::default().build().unwrap();
         let inv_opts = InversionOptionsBuilder::default().build().unwrap();
-        let ts = get_test_timeseries(npts);
+        let ts = get_test_timeseries(npts, 30.0*60.0);
         let mut radon = vec![1.0; ts.len()];
         // set this value to something higher so that gradients will be non-zero
         radon[1] = 10.0;
 
-        let time_step = 30.0 * 60.0;
+        let time_step = ts.time[1] - ts.time[0];
 
         let fwd = DetectorForwardModelBuilder::default()
             .data(ts.clone())

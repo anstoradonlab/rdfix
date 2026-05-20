@@ -1093,8 +1093,7 @@ pub fn fit_inverse_model(
     ts: InputTimeSeries,
 ) -> Result<DataSet> {
     let npts = ts.len();
-    let time_step = 60.0 * 30.0; //TODO: calculate from input
-                                 //let time_step_diff = time_step;
+    let time_step = ts.time[1] - ts.time[0];
 
     // Data, which will output at the end of the function
     let mut data: Vec<GridVariable> = vec![];
@@ -1135,7 +1134,12 @@ pub fn fit_inverse_model(
         .fold(0.0, |x, y| if y.is_finite() { x + y } else { x })
         / (n as f64);
 
-    assert!(mean_radon.is_finite());
+    if !mean_radon.is_finite() {
+        dbg!(&initial_radon);
+        dbg!(&mean_radon);
+        dbg!(&ts);
+        panic!("calculated mean_radon value, from inital radon guess, is not finite.")
+    }
 
     // Initial guess radon, un-deconvolved radon estimate with NaN gaps
     // filled with mean radon concentration (after scaling, mean radon
@@ -1284,6 +1288,10 @@ mod tests {
         for _ in 0..npts {
             ts.push(trec);
         }
+        let time_step = 30.0*60.0;
+        for ii in 0..ts.len(){
+            ts.time[ii] = (ii as f64)*time_step;
+        }
 
         //ts.counts[npts/2] *= 5.0;
         //ts.counts[npts/2+1] *= 5.0;
@@ -1357,8 +1365,6 @@ mod tests {
         let time_step = 60.0*30.0;
         let ts = TestTimeseries::new(npts, time_step, TimeseriesKind::CalibrationPulse { low_value: 10.0, high_value: 100.0 }).ts();
 
-        let time_step = 60.0 * 30.0; //TODO
-                                     // Define initial parameter vector and cost function
         let initial_radon = ts.radon_truth.clone();
         // calculate lnprob reference value (it's the exact solution, so should be == lnprob_max)
         let init_param = pack_state_vector(&initial_radon, p.clone(), ts.clone(), inv_opts);
@@ -1438,8 +1444,7 @@ mod tests {
         let p = DetectorParamsBuilder::default().build().unwrap();
         let inv_opts = InversionOptionsBuilder::default().build().unwrap();
         let ts = get_timeseries(5);
-        let time_step = 60.0 * 30.0; //TODO
-                                     // Define initial parameter vector and cost function
+        let time_step = ts.time[1] - ts.time[0];
         let initial_radon = calc_radon_without_deconvolution(&ts, time_step);
         let mut too_high_radon = initial_radon.clone();
         let rnavg = initial_radon.iter().sum::<f64>() / (initial_radon.len() as f64);
@@ -1505,8 +1510,7 @@ mod tests {
         let p = DetectorParamsBuilder::default().build().unwrap();
         let inv_opts = InversionOptionsBuilder::default().build().unwrap();
         let ts = get_timeseries(2);
-        let time_step = 60.0 * 30.0; //TODO
-                                     // Define initial parameter vector and cost function
+        let time_step = ts.time[1] - ts.time[0];
         let mut initial_radon = calc_radon_without_deconvolution(&ts, time_step);
         // set this value to something higher so that gradients will be non-zero
         initial_radon[1] = 10.0;

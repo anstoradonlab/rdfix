@@ -562,7 +562,7 @@ mod tests {
         let time_step = 60.0*30.0;
         let ts = get_test_timeseries(4, time_step);
         let mut outfile = Vec::new();
-        write_csv(&mut outfile, ts).unwrap();
+        write_csv(&mut outfile, ts, true).unwrap();
         let s = String::from_utf8(outfile.clone()).unwrap();
         let expected = "time,counts,background_count_rate,sensitivity,q_internal,q_external,airt,radon_truth,flag\n\
         2000-01-01 00:00:00,1030.0,0.016666666666666666,0.5555555555555556,0.0016666666666666668,0.0013333333333333333,21.0,NaN,0\n\
@@ -575,7 +575,7 @@ mod tests {
 
         // Can we round-trip?
         let mut outfile2 = Vec::new();
-        write_csv(&mut outfile2, read_csv(expected.as_bytes()).unwrap()).unwrap();
+        write_csv(&mut outfile2, read_csv(expected.as_bytes()).unwrap(), true).unwrap();
         assert_eq!(outfile2, outfile);
 
         // Happy to read from both "T-delemited" and space delimited date strings, with/without decimal seconds
@@ -597,8 +597,8 @@ mod tests {
         // so let's write it back into a text format and do the comparison there
         let mut ser_data = Vec::new();
         let mut ser_parsed_data = Vec::new();
-        write_csv(&mut ser_data, data).unwrap();
-        write_csv(&mut ser_parsed_data, parsed_data).unwrap();
+        write_csv(&mut ser_data, data, true).unwrap();
+        write_csv(&mut ser_parsed_data, parsed_data, true).unwrap();
         assert_eq!(ser_data, ser_parsed_data);
     }
 }
