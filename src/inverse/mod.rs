@@ -1087,11 +1087,70 @@ fn quantise_timeseries(ts: InputTimeSeries) -> (InputTimeSeries, bool) {
     (ts, flag_changed)
 }
 
+type MapType = Option<Vec<f64>>;
+
+pub fn fit_map(
+    p: DetectorParams,
+    inv_opts: InversionOptions,
+    ts: InputTimeSeries,
+) -> Result<MapType> {
+    let step1 = fit_inverse_model_impl(p.clone(), inv_opts, ts.clone(), InverseModelStep::BeforeMap)?;
+    let map = match step1{
+        InverseModelStepResult::Map(map) => map,
+        InverseModelStepResult::Final(_) => panic!("Unreachable."),
+    };
+    Ok(map)
+}
+
+pub fn fit_inverse_model_with_map(
+    p: DetectorParams,
+    inv_opts: InversionOptions,
+    ts: InputTimeSeries,
+    pre_fit_map: MapType,
+) -> Result<DataSet> {
+    let step2 = fit_inverse_model_impl(p.clone(), inv_opts, ts.clone(), InverseModelStep::AfterMap(pre_fit_map))?;
+    let data_set = match step2{
+        InverseModelStepResult::Map(_) => panic!("Unreachable."),
+        InverseModelStepResult::Final(data_set) => data_set,
+    };
+    Ok(data_set)
+}
+
+enum InverseModelStep{
+    BeforeMap,
+    AfterMap(MapType),
+}
+
+enum InverseModelStepResult{
+    Map(MapType),
+    Final(DataSet),
+}
+
 pub fn fit_inverse_model(
     p: DetectorParams,
     inv_opts: InversionOptions,
     ts: InputTimeSeries,
 ) -> Result<DataSet> {
+    let step1 = fit_inverse_model_impl(p.clone(), inv_opts, ts.clone(), InverseModelStep::BeforeMap)?;
+    let map = match step1{
+        InverseModelStepResult::Map(map) => map,
+        InverseModelStepResult::Final(_) => panic!("Unreachable."),
+    };
+    let step2 = fit_inverse_model_impl(p.clone(), inv_opts, ts.clone(), InverseModelStep::AfterMap(map))?;
+    let data_set = match step2{
+        InverseModelStepResult::Map(_) => panic!("Unreachable."),
+        InverseModelStepResult::Final(data_set) => data_set,
+    };
+    Ok(data_set)
+
+}
+
+fn fit_inverse_model_impl(
+    p: DetectorParams,
+    inv_opts: InversionOptions,
+    ts: InputTimeSeries,
+    step: InverseModelStep,
+) -> Result<InverseModelStepResult> {
     let npts = ts.len();
     let time_step = ts.time[1] - ts.time[0];
 
@@ -1185,7 +1244,9 @@ pub fn fit_inverse_model(
 
     // 2. Optimisation (MAP)
 
-    let map_radon = if inv_opts.report_map {
+    let map_radon = match step{
+        InverseModelStep::BeforeMap => { 
+        let map_radon = if inv_opts.report_map {
         info!("Searching for maximum a posteriori (MAP)");
         let niter = inv_opts.map_search_iterations;
         // COBYLA solver version
@@ -1223,19 +1284,31 @@ pub fn fit_inverse_model(
             info!("MAP r_screen scale factor {:?}", map_r_screen_scale);
             info!("MAP q_external scale factor {:?}", map_exflow_scale);
 
-            data.push(GridVariable::new_from_parts(
-                ArrayD::from_shape_vec(vec![map_radon.len()], map_radon.clone())?,
-                "map_radon",
-                &["time"],
-                None,
-            ));
             Some(map_radon)
         }
     } else {
         None
     };
-
-
+    return Ok(InverseModelStepResult::Map(map_radon));
+    },
+        InverseModelStep::AfterMap(map_radon) => {
+            match map_radon.clone(){
+                Some(map_radon) => { 
+                    // add MAP to the output data
+                    data.push(GridVariable::new_from_parts(
+                    ArrayD::from_shape_vec(vec![map_radon.len()], map_radon.clone())?,
+                    "map_radon",
+                    &["time"],
+                    None,
+                ));},
+                None => {
+                    // nothing to do, MAP was None
+                },
+            }
+            map_radon
+        },
+    };
+    
     match inv_opts.sampler_kind {
         SamplerKind::Emcee => {
             let sampler_output = inverse_model
@@ -1257,7 +1330,7 @@ pub fn fit_inverse_model(
     data.extend(ts.to_grid_vars());
 
     let ds = DataSet::new_from_variables(data);
-    Ok(ds)
+    Ok(InverseModelStepResult::Final(ds))
 }
 
 #[cfg(test)]
