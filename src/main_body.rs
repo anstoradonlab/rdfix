@@ -27,10 +27,16 @@ fn chunk_timeseries(
     if ts.len() <= totalsize {
         return Ok(vec![ts.clone()]);
     }
+    // minimum-allowable chunk size.  If we look like generating a chunk
+    // smaller than this, then instead return an extra long final chunk
+    let min_chunk_size = overlapsize + 4;
     let mut chunks: Vec<InputTimeSeries> = vec![];
     let mut i1 = 0;
     let mut i2 = i1 + totalsize;
     while i2 < ts.len() {
+        if (ts.len() - i2) < min_chunk_size {
+            i2 = ts.len();
+        }
         chunks.push(ts.slice(i1..i2).to_vec());
         i1 += chunksize;
         i2 += chunksize;
