@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use anyhow::{Error, Result, anyhow, bail};
 use rayon::prelude::*;
 
-use crate::appconfig::AppConfigBuilder;
+use crate::appconfig::{AppConfig, AppConfigBuilder};
 use crate::forward::DetectorForwardModelBuilder;
 use crate::inverse::fit_inverse_model;
 use crate::postproc::{netcdf_to_csv, postproc};
@@ -127,11 +127,35 @@ fn create_template(cmd_args: &TemplateArgs) -> Result<()> {
     Ok(())
 }
 
+/// Report an error processing a chunk, saving to a directory for later inspection
+fn report_chunk_error(ts_chunk: &InputTimeSeries, nchunks: usize, cmd_args: &DeconvArgs, config: &AppConfig, e: Error) -> Result<PathBuf> {
+    let chunk_id = ts_chunk.chunk_id();
+    error!(
+        "Error processing {}: {}.",
+        chunk_id, e
+    );
+    // write a copy of the chunk to an "errors" directory (unless the input data are all NaN)
+    if ts_chunk.counts.iter().any(|x| x.is_finite()) && nchunks > 1 {
+        let output_dir = cmd_args.output.join(format!("failed-chunk-{chunk_id}"));
+        std::fs::create_dir(&output_dir)?;
+        let csv_fname = output_dir.join("raw-data.csv");
+        let mut f = File::create(csv_fname)?;
+        write_csv(&mut f, ts_chunk.clone(), true)?;
+        let config_str = toml::to_string(&config).unwrap();
+        let config_fname = output_dir.join("config.toml");
+        fs::write(config_fname, config_str)?;
+        let output_dir = output_dir.join("deconv-output");
+        fs::create_dir_all(output_dir)?;
+    }
+    Err(anyhow!("Error processing {}: {}.", chunk_id, e))
+
+}
+
 fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
     // Load configuration file
     info!("Loading configuration from {}", &cmd_args.config.display());
     let raw_toml = std::fs::read_to_string(&cmd_args.config)?;
-    let config: crate::appconfig::AppConfig = toml::from_str(raw_toml.as_str())?;
+    let config: AppConfig = toml::from_str(raw_toml.as_str())?;
 
     // Load raw data files
     let mut ts = InputTimeSeries::new();
@@ -160,11 +184,10 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
         info!("Input data split into {} chunks.", nchunks);
     }
 
-    // .into_par_iter() makes this parallel;
-    // .panic_fuse() makes the loop stop earlier if any jobs panic
+
+
     let results_and_errors: Vec<Result<PathBuf, Error>> = chunks
         .into_par_iter()
-        //        .panic_fuse()
         .map(|ts_chunk| {
             let chunk_id = ts_chunk.chunk_id();
             let output_fname = cmd_args.output.join(format!("{chunk_id}.nc"));
@@ -188,25 +211,7 @@ fn run_deconvolution(cmd_args: &DeconvArgs) -> Result<()> {
                 panic_wrapper.unwrap_or_else(|e| Err(anyhow!("{:?}", e.downcast_ref::<&str>())));
             match fit_result {
                 Err(e) => {
-                    let chunk_id = ts_chunk.chunk_id();
-                    error!(
-                        "Error processing {}: {}.  Continuing to next block.",
-                        chunk_id, e
-                    );
-                    // write a copy of the chunk to an "errors" directory (unless the input data are all NaN)
-                    if ts_chunk.counts.iter().any(|x| x.is_finite()) && nchunks > 1 {
-                        let output_dir = cmd_args.output.join(format!("failed-chunk-{chunk_id}"));
-                        std::fs::create_dir(&output_dir)?;
-                        let csv_fname = output_dir.join("raw-data.csv");
-                        let mut f = File::create(csv_fname)?;
-                        write_csv(&mut f, ts_chunk, true)?;
-                        let config_str = toml::to_string(&config).unwrap();
-                        let config_fname = output_dir.join("config.toml");
-                        fs::write(config_fname, config_str)?;
-                        let output_dir = output_dir.join("deconv-output");
-                        fs::create_dir_all(output_dir)?;
-                    }
-                    Err(anyhow!("Error processing {}: {}.", chunk_id, e))
+                    report_chunk_error(&ts_chunk, nchunks, &cmd_args, &config, e)
                 }
                 Ok(fit_results) => {
                     let (t0, t1) = ts_chunk.time_extents_str();
